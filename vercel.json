@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build -w backroom-viewer",
+  "outputDirectory": "apps/viewer/dist",
+  "installCommand": "npm install",
+  "framework": "vite"
+}
