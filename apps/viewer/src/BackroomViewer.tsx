@@ -1266,31 +1266,23 @@ interface WorkerStatsData { idle: number; moving: number; carrying: number; work
 // Vivid colors for work actions, muted for idle/moving
 const WORK_COLORS = ["#ff6b6b", "#ffa94d", "#cc5de8", "#20c997", "#339af0"];
 
-// Worker chart segments: only non-auto transitions (what workers actually do),
-// with merged pipeline step names for labels
-const _pipelineSteps = buildPipelineSteps(DEFAULT_WORKFLOW.def);
-const _workerTransitions = DEFAULT_WORKFLOW.def.transitions.filter((t) => !t.auto);
-
-const RATIO_SEGMENTS = [
-  ..._workerTransitions.map((t, i) => {
-    const step = _pipelineSteps.find((s) => s.placeId === t.placeId && !s.isAutoOnly && s.fromColor === t.fromColor);
-    return {
-      key: `wk_${t.id}`,
-      label: step?.label ?? t.id,
-      color: WORK_COLORS[i % WORK_COLORS.length],
-    };
-  }),
-  { key: "carrying", label: "carrying", color: "#4a5568" },
-  { key: "moving", label: "moving", color: "#3d4050" },
-  { key: "idle", label: "idle", color: "#2a2d38" },
-];
-
-const WORK_KEYS = _workerTransitions.map((t) => ({
-  key: `wk_${t.id}`,
-  stateKey: t.toColor,
-}));
-
 function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
+  const { segments: RATIO_SEGMENTS, workKeys: WORK_KEYS } = useMemo(() => {
+    const steps = buildPipelineSteps(world.workflow.def);
+    const workerTransitions = world.workflow.def.transitions.filter((t) => !t.auto);
+    return {
+      segments: [
+        ...workerTransitions.map((t, i) => {
+          const step = steps.find((s) => s.placeId === t.placeId && !s.isAutoOnly && s.fromColor === t.fromColor);
+          return { key: `wk_${t.id}`, label: step?.label ?? t.id, color: WORK_COLORS[i % WORK_COLORS.length] };
+        }),
+        { key: "carrying", label: "carrying", color: "#4a5568" },
+        { key: "moving", label: "moving", color: "#3d4050" },
+        { key: "idle", label: "idle", color: "#2a2d38" },
+      ],
+      workKeys: workerTransitions.map((t) => ({ key: `wk_${t.id}`, stateKey: t.toColor })),
+    };
+  }, [world.workflow]);
   // Only show active workers (not departed)
   const data = world.workers.map((worker) => {
     const id = worker.id;
@@ -1330,25 +1322,34 @@ function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<M
 
   return (
     <div className="backroom-worker-chart">
-      <ResponsiveContainer width="100%" height={CHART_H}>
-        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
-          <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} />
-          <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} hide />
-          <Tooltip
-            cursor={false}
-            contentStyle={{ background: "#1e2028", border: "1px solid #333", fontSize: 11 }}
-            formatter={(value, name) => [`${value}%`, name]}
-            labelFormatter={(label) => {
-              const w = data.find((d) => d.name === label);
-              return w ? `${label} (${w.state})` : String(label);
-            }}
-          />
-          <RLegend wrapperStyle={{ fontSize: 9, lineHeight: "14px" }} iconSize={8} />
-          {RATIO_SEGMENTS.map((seg) => (
-            <Bar key={seg.key} dataKey={seg.key} name={seg.label} stackId="ratio" fill={seg.color} isAnimationActive={false} activeBar={false} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+      <div className="backroom-chart-box">
+        <ResponsiveContainer width="100%" height={CHART_H}>
+          <BarChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+            <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} />
+            <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} hide />
+            <Tooltip
+              cursor={false}
+              contentStyle={{ background: "#1e2028", border: "1px solid #333", fontSize: 11 }}
+              formatter={(value, name) => [`${value}%`, name]}
+              labelFormatter={(label) => {
+                const w = data.find((d) => d.name === label);
+                return w ? `${label} (${w.state})` : String(label);
+              }}
+            />
+            {RATIO_SEGMENTS.map((seg) => (
+              <Bar key={seg.key} dataKey={seg.key} name={seg.label} stackId="ratio" fill={seg.color} isAnimationActive={false} activeBar={false} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="backroom-chart-legend">
+        {RATIO_SEGMENTS.map((seg) => (
+          <div key={seg.key} className="backroom-chart-legend-item">
+            <div className="backroom-chart-legend-swatch" style={{ background: seg.color }} />
+            <span className="backroom-chart-legend-label">{seg.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -282,6 +282,7 @@
 }
 
 .backroom-throughput-chart {
+  background: #1a1a2e;
   border: 1px solid #2a2d38;
   border-radius: 4px;
   width: 100%;
@@ -328,6 +329,9 @@
 .backroom-worker-chart {
   flex: 1;
   min-width: 0;
+}
+
+.backroom-chart-box {
   background: #1a1a2e;
   border: 1px solid #2a2d38;
   border-radius: 4px;
