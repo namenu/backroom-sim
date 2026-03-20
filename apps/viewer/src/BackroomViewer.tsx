@@ -3,16 +3,37 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend as RL
 import {
   createWorld,
   tickWorld,
-  DEFAULT_LAYOUT,
-  DEFAULT_CONFIG,
-  DEFAULT_WORKFLOW_DEF,
+  DEFAULT_WORKFLOW,
   STEAK_RECIPE,
+  STEAK_LAYOUT,
+  STEAK_CONFIG,
+  BACKROOM_RECIPE,
+  BACKROOM_LAYOUT,
+  BACKROOM_CONFIG,
+  BACKROOM_WORKFLOW,
   type World,
   type SimConfig,
   type BackroomLayout,
   type StationType,
   type Recipe,
+  type WorkflowGraph,
 } from "backroom-sim";
+
+// ============================================================
+// Recipe registry — add new concepts here to make them selectable
+// ============================================================
+
+interface RecipePreset {
+  recipe: Recipe;
+  layout: BackroomLayout;
+  config: SimConfig;
+  workflow: WorkflowGraph;
+}
+
+const RECIPE_PRESETS: Record<string, RecipePreset> = {
+  steak: { recipe: STEAK_RECIPE, layout: STEAK_LAYOUT, config: STEAK_CONFIG, workflow: DEFAULT_WORKFLOW },
+  backroom: { recipe: BACKROOM_RECIPE, layout: BACKROOM_LAYOUT, config: BACKROOM_CONFIG, workflow: BACKROOM_WORKFLOW },
+};
 
 const TILE_SIZE = 36;
 
@@ -21,30 +42,46 @@ const ISO_TILE_W = 64;
 const ISO_TILE_H = 32;
 
 // ============================================================
-// Recipe-driven visual metadata
-// All visual mappings are derived from the active recipe.
-// To add a new concept, create a new Recipe and swap it in.
+// Recipe-driven visual metadata helpers
 // ============================================================
 
-const ACTIVE_RECIPE: Recipe = STEAK_RECIPE;
+function deriveVisuals(recipe: Recipe) {
+  const stationEmoji: Record<string, string> = {};
+  const stationColors: Record<string, string> = {};
+  const stationTileMap: Record<string, string> = {};
+  for (const [k, v] of Object.entries(recipe.stationMeta)) {
+    stationEmoji[k] = v.emoji;
+    stationColors[k] = v.color;
+    stationTileMap[k] = v.tileAsset;
+  }
+  return {
+    stationTypes: [...recipe.stationTypes] as StationType[],
+    stationEmoji,
+    stationColors,
+    stationTileMap,
+    chartStages: recipe.chartStages.map((s) => ({
+      label: s.label, color: s.color,
+      filter: (w: World) => w.items.filter((i) => i.state === s.state).length,
+    })),
+    completedSet: new Set(recipe.completedStates),
+  };
+}
 
-/** Station types, derived from recipe */
-const STATION_TYPES: StationType[] = [...ACTIVE_RECIPE.stationTypes];
+// Current visuals — updated atomically when recipe changes
+let _visuals = deriveVisuals(STEAK_RECIPE);
+let STATION_TYPES = _visuals.stationTypes;
+let STATION_EMOJI = _visuals.stationEmoji;
+let STATION_COLORS = _visuals.stationColors;
+let STATION_TILE_MAP = _visuals.stationTileMap;
 
-/** Emoji per station, derived from recipe stationMeta */
-const STATION_EMOJI: Record<string, string> = Object.fromEntries(
-  Object.entries(ACTIVE_RECIPE.stationMeta).map(([k, v]) => [k, v.emoji])
-);
-
-/** Color per station, derived from recipe stationMeta */
-const STATION_COLORS: Record<string, string> = Object.fromEntries(
-  Object.entries(ACTIVE_RECIPE.stationMeta).map(([k, v]) => [k, v.color])
-);
-
-/** Tile asset filename per station, derived from recipe stationMeta */
-const STATION_TILE_MAP: Record<string, string> = Object.fromEntries(
-  Object.entries(ACTIVE_RECIPE.stationMeta).map(([k, v]) => [k, v.tileAsset])
-);
+function applyVisuals(recipe: Recipe) {
+  _visuals = deriveVisuals(recipe);
+  STATION_TYPES = _visuals.stationTypes;
+  STATION_EMOJI = _visuals.stationEmoji;
+  STATION_COLORS = _visuals.stationColors;
+  STATION_TILE_MAP = _visuals.stationTileMap;
+  CHART_STAGES = _visuals.chartStages;
+}
 
 const WORKER_COLORS = ["#44bbee", "#ee7744", "#66dd55", "#dd66cc", "#ddaa33", "#55cccc"];
 
@@ -121,15 +158,17 @@ function applyLayoutToWorld(world: World, layout: BackroomLayout) {
 // ============================================================
 
 export function BackroomViewer() {
-  const [layout, setLayout] = useState<BackroomLayout>(() => structuredClone(DEFAULT_LAYOUT));
-  const [config, setConfig] = useState<SimConfig>({ ...DEFAULT_CONFIG });
+  const [presetKey, setPresetKey] = useState<string>("steak");
+  const preset = RECIPE_PRESETS[presetKey];
+  const [layout, setLayout] = useState<BackroomLayout>(() => structuredClone(preset.layout));
+  const [config, setConfig] = useState<SimConfig>({ ...preset.config });
   const [speed, setSpeed] = useState(1);
   const [paused, setPaused] = useState(false);
-  const worldRef = useRef(createWorld(config, layout));
+  const worldRef = useRef(createWorld(config, layout, preset.workflow, preset.recipe));
   const [, setTick] = useState(0);
 
   // Editor state
-  const [tool, setTool] = useState<Tool>("order_window");
+  const [tool, setTool] = useState<Tool>(preset.recipe.stationTypes[0] as StationType);
   const [showJson, setShowJson] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
 
@@ -144,13 +183,35 @@ export function BackroomViewer() {
     applyLayoutToWorld(worldRef.current, layout);
   }, [layout]);
 
-  const resetWorld = useCallback((newConfig: SimConfig) => {
-    setConfig(newConfig);
-    worldRef.current = createWorld(newConfig, layoutRef.current);
+  const clearStats = useCallback(() => {
     statsRef.current.clear();
     prevWorkerStates.current.clear();
     setTick(0);
   }, []);
+
+  const resetWorld = useCallback((newConfig: SimConfig) => {
+    setConfig(newConfig);
+    const p = RECIPE_PRESETS[presetKey];
+    worldRef.current = createWorld(newConfig, layoutRef.current, p.workflow, p.recipe);
+    clearStats();
+  }, [presetKey, clearStats]);
+
+  // Switch recipe preset
+  const switchRecipe = useCallback((key: string) => {
+    const p = RECIPE_PRESETS[key];
+    if (!p) return;
+    // Update module-level visuals (synchronous, before React re-renders)
+    applyVisuals(p.recipe);
+    // Reset state
+    const newLayout = structuredClone(p.layout);
+    const newConfig = { ...p.config };
+    setPresetKey(key);
+    setLayout(newLayout);
+    setConfig(newConfig);
+    setTool(p.recipe.stationTypes[0] as StationType);
+    worldRef.current = createWorld(newConfig, newLayout, p.workflow, p.recipe);
+    clearStats();
+  }, [clearStats]);
 
   // Fixed timestep sim loop
   const TICK_MS = 50;
@@ -251,8 +312,17 @@ export function BackroomViewer() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ padding: '6px 12px', borderBottom: '1px solid #252830', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, background: '#12141c' }}>
-        <span style={{ fontWeight: 700, fontSize: 13, color: '#e8eaed' }}>Kitchen Simulator</span>
-        <span style={{ fontSize: 10, color: '#555a66' }}>Steak restaurant workflow simulation</span>
+        <span style={{ fontWeight: 700, fontSize: 13, color: '#e8eaed' }}>Workflow Simulator</span>
+        <select
+          value={presetKey}
+          onChange={(e) => switchRecipe(e.target.value)}
+          style={{ fontSize: 11, background: '#1a1d26', color: '#e8eaed', border: '1px solid #353840', borderRadius: 3, padding: '2px 6px' }}
+        >
+          {Object.entries(RECIPE_PRESETS).map(([key, p]) => (
+            <option key={key} value={key}>{p.recipe.name}</option>
+          ))}
+        </select>
+        <span style={{ fontSize: 10, color: '#555a66' }}>{preset.recipe.description}</span>
       </div>
 
       <div className="backroom-app">
@@ -276,7 +346,7 @@ export function BackroomViewer() {
             setConfig({ ...worldRef.current.config });
           }}
           onClearLayout={() => setLayout((prev) => ({ ...prev, stations: [] }))}
-          onLoadDefault={() => setLayout(structuredClone(DEFAULT_LAYOUT))}
+          onLoadDefault={() => setLayout(structuredClone(preset.layout))}
           onShowJson={() => {
             navigator.clipboard.writeText(JSON.stringify(layout, null, 2)).catch(() => {});
             setShowJson(true);
@@ -704,12 +774,11 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
 // ============================================================
 
 function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
-  const completedSet = new Set(ACTIVE_RECIPE.completedStates);
   const stateCounts: Record<string, number> = {};
   let completed = 0;
   for (const item of world.items) {
     stateCounts[item.state] = (stateCounts[item.state] ?? 0) + 1;
-    if (completedSet.has(item.state)) completed++;
+    if (_visuals.completedSet.has(item.state)) completed++;
   }
   const total = world.items.length;
 
@@ -731,7 +800,7 @@ function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number
   return (
     <div className="backroom-hud">
       <span>tick: {world.tick}</span>
-      {ACTIVE_RECIPE.completedStates.map((s) => (
+      {world.recipe.completedStates.map((s) => (
         <span key={s}>{s}: {stateCounts[s] ?? 0}</span>
       ))}
       <span>orders: {total}</span>
@@ -840,8 +909,8 @@ function EfficiencyChart({ worldRef, statsRef }: {
         data.ticks.push(world.tick);
 
         // Throughput: EMA of items per 1000 ticks
-        const _completedSet = new Set(ACTIVE_RECIPE.completedStates);
-        const curCompleted = world.items.filter(i => _completedSet.has(i.state)).length;
+        let curCompleted = 0;
+        for (const i of world.items) if (_visuals.completedSet.has(i.state)) curCompleted++;
         const rawRate = (curCompleted - prevServed.current) * (1000 / EFF_SAMPLE_INTERVAL);
         prevServed.current = curCompleted;
         const alpha = 0.15; // smoothing factor
@@ -980,11 +1049,8 @@ function EfficiencyChart({ worldRef, statsRef }: {
 // Throughput Chart (item states)
 // ============================================================
 
-const CHART_STAGES = ACTIVE_RECIPE.chartStages.map((s) => ({
-  label: s.label,
-  color: s.color,
-  filter: (w: World) => w.items.filter((i) => i.state === s.state).length,
-}));
+// CHART_STAGES is derived from the current visuals (updated on recipe switch)
+let CHART_STAGES = _visuals.chartStages;
 
 const SAMPLE_INTERVAL = 20;
 const MAX_SAMPLES = 200;
@@ -1029,7 +1095,7 @@ function ThroughputChart({ worldRef }: { worldRef: RefObject<World> }) {
       const chartW = container.clientWidth;
       if (chartW < 100) { raf = requestAnimationFrame(draw); return; }
 
-      if (world.tick < lastSampleTick.current) {
+      if (world.tick < lastSampleTick.current || data.series.length !== CHART_STAGES.length) {
         data.ticks = [];
         data.series = CHART_STAGES.map(() => []);
         lastSampleTick.current = -SAMPLE_INTERVAL;
@@ -1164,24 +1230,27 @@ interface WorkerStatsData { idle: number; moving: number; carrying: number; work
 // Vivid colors for work actions, muted for idle/moving
 const WORK_COLORS = ["#ff6b6b", "#ffa94d", "#cc5de8", "#20c997", "#339af0"];
 
-const RATIO_SEGMENTS = [
-  ...DEFAULT_WORKFLOW_DEF.transitions.map((t, i) => ({
-    key: `wk_${t.id}`,
-    label: t.id,
-    color: WORK_COLORS[i % WORK_COLORS.length],
-  })),
-  { key: "carrying", label: "carrying", color: "#4a5568" },
-  { key: "moving", label: "moving", color: "#3d4050" },
-  { key: "idle", label: "idle", color: "#2a2d38" },
-];
-
-// Derive work keys from workflow transitions (SSOT)
-const WORK_KEYS = DEFAULT_WORKFLOW_DEF.transitions.map((t) => ({
-  key: `wk_${t.id}`,
-  stateKey: t.toColor,
-}));
-
 function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
+  const workflow = world.workflow;
+  const { segments: RATIO_SEGMENTS, workKeys: WORK_KEYS } = useMemo(() => {
+    const transitions = workflow.def.transitions.filter((t) => !t.auto);
+    return {
+      segments: [
+        ...transitions.map((t, i) => ({
+          key: `wk_${t.id}`,
+          label: t.id,
+          color: WORK_COLORS[i % WORK_COLORS.length],
+        })),
+        { key: "carrying", label: "carrying", color: "#4a5568" },
+        { key: "moving", label: "moving", color: "#3d4050" },
+        { key: "idle", label: "idle", color: "#2a2d38" },
+      ],
+      workKeys: transitions.map((t) => ({
+        key: `wk_${t.id}`,
+        stateKey: t.toColor,
+      })),
+    };
+  }, [workflow]);
   // Only show active workers (not departed)
   const data = world.workers.map((worker) => {
     const id = worker.id;

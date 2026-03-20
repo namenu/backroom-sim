@@ -26,6 +26,10 @@ export type { Place, Transition, WorkflowDef, PlaceRole, StorageRoute } from "./
 export { DEFAULT_WORKFLOW, DEFAULT_WORKFLOW_DEF } from "./kitchen";
 export { STEAK_RECIPE, STEAK_LAYOUT, STEAK_CONFIG } from "./kitchen";
 
+// Backroom (original) recipe
+export { BACKROOM_WORKFLOW, BACKROOM_WORKFLOW_DEF } from "./backroom";
+export { BACKROOM_RECIPE, BACKROOM_LAYOUT, BACKROOM_CONFIG } from "./backroom";
+
 // Rule engine
 export { DEFAULT_RULES, perceive, evaluate, execute, matchCondition } from "./engine";
 export type { Rule, Condition, Action, Intent, Perception, PipelineSnapshot, StationSummary } from "./engine";
