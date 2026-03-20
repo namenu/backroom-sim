@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend as RLegend } from "recharts";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   createWorld,
   tickWorld,
@@ -15,9 +15,16 @@ import {
   type SimConfig,
   type BackroomLayout,
   type StationType,
+  type Station,
+  type Item,
+  type Worker,
+  type LogEntry,
+  type StationMeta,
+  type ChartStageDef,
   type Recipe,
   type WorkflowGraph,
   type WorkflowDef,
+  type Transition,
 } from "backroom-sim";
 
 // ============================================================
@@ -50,7 +57,7 @@ function deriveVisuals(recipe: Recipe) {
   const stationEmoji: Record<string, string> = {};
   const stationColors: Record<string, string> = {};
   const stationTileMap: Record<string, string> = {};
-  for (const [k, v] of Object.entries(recipe.stationMeta)) {
+  for (const [k, v] of Object.entries(recipe.stationMeta) as [string, StationMeta][]) {
     stationEmoji[k] = v.emoji;
     stationColors[k] = v.color;
     stationTileMap[k] = v.tileAsset;
@@ -60,9 +67,9 @@ function deriveVisuals(recipe: Recipe) {
     stationEmoji,
     stationColors,
     stationTileMap,
-    chartStages: recipe.chartStages.map((s) => ({
+    chartStages: recipe.chartStages.map((s: ChartStageDef) => ({
       label: s.label, color: s.color,
-      filter: (w: World) => w.items.filter((i) => i.state === s.state).length,
+      filter: (w: World) => w.items.filter((i: Item) => i.state === s.state).length,
     })),
     completedSet: new Set(recipe.completedStates),
   };
@@ -150,8 +157,8 @@ function gridToIsoScaled(gx: number, gy: number): [number, number] {
 function applyLayoutToWorld(world: World, layout: BackroomLayout) {
   world.cols = layout.cols;
   world.rows = layout.rows;
-  world.stations = layout.stations.map((d) => ({ type: d.type, x: d.x, y: d.y }));
-  world.stationTileSet = new Set(world.stations.map((s) => `${s.x},${s.y}`));
+  world.stations = layout.stations.map((d: Station) => ({ type: d.type, x: d.x, y: d.y }));
+  world.stationTileSet = new Set(world.stations.map((s: Station) => `${s.x},${s.y}`));
 }
 
 // ============================================================
@@ -251,7 +258,7 @@ export function BackroomViewer() {
             prevWorkerStates.current.set(w.id, w.state);
           }
         }
-        if (ticked) setTick((t) => t + 1);
+        if (ticked) setTick((t: number) => t + 1);
       }
       lastTime = now;
       raf = requestAnimationFrame(loop);
@@ -263,9 +270,9 @@ export function BackroomViewer() {
   // --- Layout editing callbacks ---
   const handleCellClick = useCallback(
     (x: number, y: number, currentTool: Tool) => {
-      setLayout((prev) => {
+      setLayout((prev: BackroomLayout) => {
         const next = structuredClone(prev);
-        const idx = next.stations.findIndex((s) => s.x === x && s.y === y);
+        const idx = next.stations.findIndex((s: Station) => s.x === x && s.y === y);
         if (currentTool === "eraser") {
           if (idx >= 0) next.stations.splice(idx, 1);
         } else {
@@ -282,20 +289,20 @@ export function BackroomViewer() {
   );
 
   const handleCellRightClick = useCallback((x: number, y: number) => {
-    setLayout((prev) => {
+    setLayout((prev: BackroomLayout) => {
       const next = structuredClone(prev);
-      const idx = next.stations.findIndex((s) => s.x === x && s.y === y);
+      const idx = next.stations.findIndex((s: Station) => s.x === x && s.y === y);
       if (idx >= 0) next.stations.splice(idx, 1);
       return next;
     });
   }, []);
 
   const setGridSize = useCallback((cols: number, rows: number) => {
-    setLayout((prev) => {
+    setLayout((prev: BackroomLayout) => {
       const next = structuredClone(prev);
       next.cols = cols;
       next.rows = rows;
-      next.stations = next.stations.filter((s) => s.x < cols && s.y < rows);
+      next.stations = next.stations.filter((s: Station) => s.x < cols && s.y < rows);
       return next;
     });
   }, []);
@@ -315,7 +322,7 @@ export function BackroomViewer() {
         <span style={{ fontWeight: 700, fontSize: 13, color: '#e8eaed' }}>Workflow Simulator</span>
         <select
           value={presetKey}
-          onChange={(e) => switchRecipe(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => switchRecipe(e.target.value)}
           style={{ fontSize: 11, background: '#1a1d26', color: '#e8eaed', border: '1px solid #353840', borderRadius: 3, padding: '2px 6px' }}
         >
           {Object.entries(RECIPE_PRESETS).map(([key, p]) => (
@@ -345,7 +352,7 @@ export function BackroomViewer() {
             worldRef.current.config.workerCount = count;
             setConfig({ ...worldRef.current.config });
           }}
-          onClearLayout={() => setLayout((prev) => ({ ...prev, stations: [] }))}
+          onClearLayout={() => setLayout((prev: BackroomLayout) => ({ ...prev, stations: [] }))}
           onLoadDefault={() => setLayout(structuredClone(preset.layout))}
           onShowJson={() => {
             navigator.clipboard.writeText(JSON.stringify(layout, null, 2)).catch(() => {});
@@ -425,12 +432,12 @@ function Sidebar({
       <label>
         Speed: {speed}x
         <input type="range" min={1} max={10} value={speed}
-          onChange={(e) => onSpeedChange(Number(e.target.value))} />
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSpeedChange(Number(e.target.value))} />
       </label>
       <label>
         Workers: {config.workerCount}
         <input type="range" min={1} max={12} value={config.workerCount}
-          onChange={(e) => onWorkerCountChange(Number(e.target.value))} />
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onWorkerCountChange(Number(e.target.value))} />
       </label>
       <div className="sidebar-buttons">
         <button onClick={() => onPausedChange(!paused)}>
@@ -448,12 +455,12 @@ function Sidebar({
           <label>
             Cols: {layout.cols}
             <input type="range" min={MIN_COLS} max={MAX_COLS} value={layout.cols}
-              onChange={(e) => onGridSize(Number(e.target.value), layout.rows)} />
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onGridSize(Number(e.target.value), layout.rows)} />
           </label>
           <label>
             Rows: {layout.rows}
             <input type="range" min={MIN_ROWS} max={MAX_ROWS} value={layout.rows}
-              onChange={(e) => onGridSize(layout.cols, Number(e.target.value))} />
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onGridSize(layout.cols, Number(e.target.value))} />
           </label>
           <div className="sidebar-buttons">
             <button onClick={onClearLayout}>Clear</button>
@@ -551,9 +558,9 @@ function EditorGrid({
           key={key}
           className={`mapeditor-cell ${st ? "has-station" : ""}`}
           style={{ background: st ? STATION_COLORS[st] : undefined }}
-          onPointerDown={(e) => { e.preventDefault(); handlePointerDown(gx, gy, e.button); }}
+          onPointerDown={(e: React.PointerEvent) => { e.preventDefault(); handlePointerDown(gx, gy, e.button); }}
           onPointerEnter={() => handlePointerEnter(gx, gy)}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={(e: React.MouseEvent) => e.preventDefault()}
           title={st ? `${st} (${gx},${gy})` : `empty (${gx},${gy})`}
         >
           {st && <span className="mapeditor-cell-emoji">{STATION_EMOJI[st]}</span>}
@@ -798,7 +805,7 @@ function buildPipelineSteps(workflow: WorkflowDef): PipelineStep[] {
     if (!t.auto) {
       // Look for a paired auto transition: same placeId, fromColor === t.toColor
       const autoIdx = transitions.findIndex(
-        (a, j) => j > i && !consumed.has(j) && a.auto && a.placeId === t.placeId && a.fromColor === t.toColor
+        (a: Transition, j: number) => j > i && !consumed.has(j) && a.auto && a.placeId === t.placeId && a.fromColor === t.toColor
       );
       if (autoIdx >= 0) {
         const auto = transitions[autoIdx];
@@ -845,12 +852,6 @@ function buildPipelineSteps(workflow: WorkflowDef): PipelineStep[] {
 
 function ProcessFlow({ world }: { world: World }) {
   const steps = useMemo(() => buildPipelineSteps(world.workflow.def), [world.workflow]);
-  const stageColorMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const s of world.recipe.chartStages) m[s.state] = s.color;
-    return m;
-  }, [world.recipe]);
-
   // Count items per state
   const stateCounts: Record<string, number> = {};
   for (const item of world.items) {
@@ -865,7 +866,7 @@ function ProcessFlow({ world }: { world: World }) {
 
   return (
     <div className="process-flow">
-      {steps.map((step, i) => {
+      {steps.map((step: PipelineStep) => {
         const waiting = stateCounts[step.fromColor] ?? 0;
         const processing = step.processingState ? (stateCounts[step.processingState] ?? 0) : 0;
         const stations = stationCounts[step.placeId] ?? 0;
@@ -1086,7 +1087,8 @@ function EfficiencyChart({ worldRef, statsRef }: {
 // ============================================================
 
 // CHART_STAGES is derived from the current visuals (updated on recipe switch)
-let CHART_STAGES = _visuals.chartStages;
+interface ChartStage { label: string; color: string; filter: (w: World) => number }
+let CHART_STAGES: ChartStage[] = _visuals.chartStages;
 
 const SAMPLE_INTERVAL = 20;
 const MAX_SAMPLES = 200;
@@ -1111,7 +1113,7 @@ function ThroughputChart({ worldRef }: { worldRef: RefObject<World> }) {
   hiddenRef.current = hiddenSeries;
 
   const toggleSeries = useCallback((idx: number) => {
-    setHiddenSeries((prev) => {
+    setHiddenSeries((prev: Set<number>) => {
       const next = new Set(prev);
       if (next.has(idx)) next.delete(idx);
       else next.add(idx);
@@ -1266,25 +1268,28 @@ interface WorkerStatsData { idle: number; moving: number; carrying: number; work
 // Vivid colors for work actions, muted for idle/moving
 const WORK_COLORS = ["#ff6b6b", "#ffa94d", "#cc5de8", "#20c997", "#339af0"];
 
+interface RatioSegment { key: string; label: string; color: string }
+interface WorkKey { key: string; stateKey: string }
+
 function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
-  const { segments: RATIO_SEGMENTS, workKeys: WORK_KEYS } = useMemo(() => {
+  const { segments: RATIO_SEGMENTS, workKeys: WORK_KEYS } = useMemo((): { segments: RatioSegment[]; workKeys: WorkKey[] } => {
     const steps = buildPipelineSteps(world.workflow.def);
-    const workerTransitions = world.workflow.def.transitions.filter((t) => !t.auto);
+    const workerTransitions = world.workflow.def.transitions.filter((t: Transition) => !t.auto);
     return {
       segments: [
-        ...workerTransitions.map((t, i) => {
-          const step = steps.find((s) => s.placeId === t.placeId && !s.isAutoOnly && s.fromColor === t.fromColor);
+        ...workerTransitions.map((t: Transition, i: number) => {
+          const step = steps.find((s: PipelineStep) => s.placeId === t.placeId && !s.isAutoOnly && s.fromColor === t.fromColor);
           return { key: `wk_${t.id}`, label: step?.label ?? t.id, color: WORK_COLORS[i % WORK_COLORS.length] };
         }),
         { key: "carrying", label: "carrying", color: "#4a5568" },
         { key: "moving", label: "moving", color: "#3d4050" },
         { key: "idle", label: "idle", color: "#2a2d38" },
       ],
-      workKeys: workerTransitions.map((t) => ({ key: `wk_${t.id}`, stateKey: t.toColor })),
+      workKeys: workerTransitions.map((t: Transition) => ({ key: `wk_${t.id}`, stateKey: t.toColor })),
     };
   }, [world.workflow]);
   // Only show active workers (not departed)
-  const data = world.workers.map((worker) => {
+  const data = world.workers.map((worker: Worker) => {
     const id = worker.id;
     const stats = statsRef.current?.get(id);
     const total = stats ? stats.idle + stats.moving + stats.carrying + stats.working : 1;
@@ -1330,20 +1335,20 @@ function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<M
             <Tooltip
               cursor={false}
               contentStyle={{ background: "#1e2028", border: "1px solid #333", fontSize: 11 }}
-              formatter={(value, name) => [`${value}%`, name]}
-              labelFormatter={(label) => {
-                const w = data.find((d) => d.name === label);
+              formatter={(value: number | string, name: string) => [`${value}%`, name]}
+              labelFormatter={(label: string) => {
+                const w = data.find((d: Record<string, string | number>) => d.name === label);
                 return w ? `${label} (${w.state})` : String(label);
               }}
             />
-            {RATIO_SEGMENTS.map((seg) => (
+            {RATIO_SEGMENTS.map((seg: RatioSegment) => (
               <Bar key={seg.key} dataKey={seg.key} name={seg.label} stackId="ratio" fill={seg.color} isAnimationActive={false} activeBar={false} />
             ))}
           </BarChart>
         </ResponsiveContainer>
       </div>
       <div className="backroom-chart-legend">
-        {RATIO_SEGMENTS.map((seg) => (
+        {RATIO_SEGMENTS.map((seg: RatioSegment) => (
           <div key={seg.key} className="backroom-chart-legend-item">
             <div className="backroom-chart-legend-swatch" style={{ background: seg.color }} />
             <span className="backroom-chart-legend-label">{seg.label}</span>
@@ -1366,7 +1371,7 @@ function LogPanel({ world, defaultOpen = true }: { world: World; defaultOpen?: b
     }
   }, [logLen, open]);
 
-  const workerIds = world.workers.map((w) => w.id);
+  const workerIds = world.workers.map((w: Worker) => w.id);
   const logsByWorker = new Map<number, typeof world.logs>();
   for (const id of workerIds) logsByWorker.set(id, []);
   for (const l of world.logs) logsByWorker.get(l.workerId)?.push(l);
@@ -1380,8 +1385,8 @@ function LogPanel({ world, defaultOpen = true }: { world: World; defaultOpen?: b
       >
         {open ? "▼" : "▶"} Worker Logs
       </div>
-      {open && workerIds.map((id) => {
-        const worker = world.workers.find((w) => w.id === id);
+      {open && workerIds.map((id: number) => {
+        const worker = world.workers.find((w: Worker) => w.id === id);
         const stateLabel = worker?.state ?? "idle";
         const intentLabel = worker?.intent || "";
 
@@ -1395,9 +1400,9 @@ function LogPanel({ world, defaultOpen = true }: { world: World; defaultOpen?: b
           </div>
           <div
             className="backroom-log-scroll"
-            ref={(el) => { if (el) refsMap.current.set(id, el); }}
+            ref={(el: HTMLDivElement | null) => { if (el) refsMap.current.set(id, el); }}
           >
-            {(logsByWorker.get(id) ?? []).map((l, i) => (
+            {(logsByWorker.get(id) ?? []).map((l: LogEntry, i: number) => (
               <div key={i} className="backroom-log-line">
                 [{l.tick}] {l.message}
               </div>
@@ -1479,7 +1484,7 @@ function JsonPanel({
       <textarea
         className="mapeditor-json-textarea"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setText(e.target.value)}
         spellCheck={false}
       />
       {error && <div className="mapeditor-json-error">{error}</div>}
