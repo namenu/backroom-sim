@@ -1268,8 +1268,8 @@ const WORK_COLORS = ["#ff6b6b", "#ffa94d", "#cc5de8", "#20c997", "#339af0"];
 
 // Worker chart segments: only non-auto transitions (what workers actually do),
 // with merged pipeline step names for labels
-const _pipelineSteps = buildPipelineSteps(DEFAULT_WORKFLOW_DEF);
-const _workerTransitions = DEFAULT_WORKFLOW_DEF.transitions.filter((t) => !t.auto);
+const _pipelineSteps = buildPipelineSteps(DEFAULT_WORKFLOW.def);
+const _workerTransitions = DEFAULT_WORKFLOW.def.transitions.filter((t) => !t.auto);
 
 const RATIO_SEGMENTS = [
   ..._workerTransitions.map((t, i) => {
