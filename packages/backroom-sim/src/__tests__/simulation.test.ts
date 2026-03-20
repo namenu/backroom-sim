@@ -8,37 +8,37 @@ function runTicks(world: World, n: number) {
 
 /** Terminal states where no further action is needed */
 function isTerminal(state: string): boolean {
-  return state === "served" || state === "stored";
+  return state === "served" || state === "clean";
 }
 
-describe("backroom simulation", () => {
-  it("items should progress through the full pipeline: raw → chopped → cooked → served", () => {
-    const world = createWorld({ workerCount: 3, deliverySize: 4, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 2000);
+describe("kitchen simulation — steak recipe", () => {
+  it("steaks should progress through the full pipeline: raw → portioned → seared → rested → plated → served", () => {
+    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
+    runTicks(world, 3000);
 
-    // Items reach served or beyond (dirty/clean/stored)
+    // Items reach served or beyond (dirty/clean)
     const past = world.items.filter((i) =>
-      i.state === "served" || i.state === "dirty" || i.state === "clean" || i.state === "stored"
+      i.state === "served" || i.state === "dirty" || i.state === "clean"
     ).length;
     expect(past).toBeGreaterThan(0);
   });
 
-  it("chopped items should appear as intermediate state", () => {
-    const world = createWorld({ workerCount: 2, deliverySize: 4, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
+  it("portioned steaks should appear as intermediate state", () => {
+    const world = createWorld({ workerCount: 2, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
 
-    let sawChopped = false;
-    for (let i = 0; i < 1500; i++) {
+    let sawPortioned = false;
+    for (let i = 0; i < 2000; i++) {
       tickWorld(world);
-      if (world.items.some((it) => it.state === "chopped")) {
-        sawChopped = true;
+      if (world.items.some((it) => it.state === "portioned")) {
+        sawPortioned = true;
         break;
       }
     }
-    expect(sawChopped).toBe(true);
+    expect(sawPortioned).toBe(true);
   });
 
   it("workers should not carry an item forever", () => {
-    const world = createWorld({ workerCount: 3, deliverySize: 6, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
+    const world = createWorld({ workerCount: 3, orderSize: 6, orderInterval: 9999 }, DEFAULT_LAYOUT);
     runTicks(world, 300);
 
     const carryStart = new Map<number, number>();
@@ -57,7 +57,7 @@ describe("backroom simulation", () => {
   });
 
   it("no worker should be permanently idle when there is work", () => {
-    const world = createWorld({ workerCount: 3, deliverySize: 6, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
+    const world = createWorld({ workerCount: 3, orderSize: 6, orderInterval: 9999 }, DEFAULT_LAYOUT);
 
     const idleTicks = new Map<number, number>();
 
@@ -79,31 +79,31 @@ describe("backroom simulation", () => {
     }
   });
 
-  it("pipeline throughput: most food items should be served given enough time", () => {
-    const world = createWorld({ workerCount: 3, deliverySize: 6, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 12000);
+  it("pipeline throughput: most steaks should be served given enough time", () => {
+    const world = createWorld({ workerCount: 3, orderSize: 6, orderInterval: 9999 }, DEFAULT_LAYOUT);
+    runTicks(world, 15000);
 
     // Count items that reached served or beyond
     const completed = world.items.filter((i) =>
-      i.state === "served" || i.state === "dirty" || i.state === "clean" || i.state === "stored"
+      i.state === "served" || i.state === "dirty" || i.state === "clean"
     ).length;
     // At least a third of items should have completed the pipeline
     expect(completed).toBeGreaterThanOrEqual(Math.floor(world.items.length / 3));
   });
 
-  it("dirty dishes should be cleaned and stored", () => {
-    const world = createWorld({ workerCount: 3, deliverySize: 4, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 10000);
+  it("dirty dishes should be cleaned", () => {
+    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
+    runTicks(world, 12000);
 
-    const stored = world.items.filter((i) => i.state === "stored").length;
-    expect(stored).toBeGreaterThan(0);
+    const cleaned = world.items.filter((i) => i.state === "clean").length;
+    expect(cleaned).toBeGreaterThan(0);
   });
 
   it("dirty dishes should not pile up excessively", () => {
-    const world = createWorld({ workerCount: 3, deliverySize: 4, deliveryInterval: 9999 }, DEFAULT_LAYOUT);
+    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
 
     let maxDirty = 0;
-    for (let t = 0; t < 5000; t++) {
+    for (let t = 0; t < 6000; t++) {
       tickWorld(world);
       const dirty = world.items.filter((i) => i.state === "dirty" && i.carriedBy === null).length;
       maxDirty = Math.max(maxDirty, dirty);
@@ -113,27 +113,37 @@ describe("backroom simulation", () => {
   });
 
   it("BFS navigates around obstacles to reach target station", () => {
-    // Default layout. Worker starts at (1,4) carrying a raw item
-    // picked up from a shelf. Must BFS around stations to reach prep_table.
+    // Worker starts near fridge carrying a raw steak. Must BFS to cutting_board.
     const world = createWorld(
-      { workerCount: 1, deliverySize: 0, deliveryInterval: 99999 },
+      { workerCount: 1, orderSize: 0, orderInterval: 99999 },
       DEFAULT_LAYOUT,
     );
 
     const worker = world.workers[0];
     worker.x = 1;
-    worker.y = 4;
-    // Place item at shelf (0,4) so carriedPickupRole = "storage"
+    worker.y = 3;
+    // Place item at fridge (0,3) so carriedPickupRole = "storage"
     worker.carryingItem = 999;
     world.items.push({
-      id: 999, type: "onion", state: "raw", x: 0, y: 4, carriedBy: worker.id,
+      id: 999, type: "ribeye", state: "raw", x: 0, y: 3, carriedBy: worker.id,
     });
 
-    // Worker should navigate to a prep_table and start working
-    runTicks(world, 200);
+    // Worker should navigate to a cutting_board and start working
+    runTicks(world, 300);
 
-    // Item should have been processed (chopped at prep_table)
+    // Item should have been processed (portioned at cutting_board)
     const item = world.items.find((i) => i.id === 999)!;
     expect(item.state).not.toBe("raw");
+  });
+
+  it("ordersServed counter tracks served steaks", () => {
+    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
+    runTicks(world, 5000);
+
+    // ordersServed should match items that reached served state
+    const servedOrBeyond = world.items.filter((i) =>
+      i.state === "served" || i.state === "dirty" || i.state === "clean"
+    ).length;
+    expect(world.ordersServed).toBe(servedOrBeyond);
   });
 });

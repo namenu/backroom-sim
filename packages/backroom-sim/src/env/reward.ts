@@ -25,11 +25,8 @@ export function initialRewardState(): RewardState {
 const REWARD_TICK = -0.01;           // time pressure
 const REWARD_PICKUP = 0.5;           // picked up an item
 const REWARD_WORK_COMPLETE = 2.0;    // completed a processing step
-const REWARD_SERVE = 5.0;            // item reached "served"
-const REWARD_STORE = 1.0;            // item stored (cycle complete)
-// Available for future reward shaping:
-// const REWARD_INVALID = -0.1;         // wasted action
-// const STATE_PROGRESS = { raw: 0, chopped: 1, cooked: 2, served: 3, dirty: 4, clean: 5, stored: 6 };
+const REWARD_SERVE = 5.0;            // steak served (plated → served)
+const REWARD_CLEAN = 1.0;            // dish cleaned (cycle complete)
 
 /**
  * Compute reward for a single worker after one tick.
@@ -55,13 +52,13 @@ export function computeReward(
   if (prev.wasWorking && !isWorking) {
     reward += REWARD_WORK_COMPLETE;
 
-    // Check if the completed work produced a "served" or "stored" item
+    // Check if the completed work produced a "served" or "clean" item
     for (const item of world.items) {
       const prevState = prev.itemStates.get(item.id);
       if (prevState === undefined) continue;
       if (prevState !== item.state) {
         if (item.state === "served") reward += REWARD_SERVE;
-        if (item.state === "stored") reward += REWARD_STORE;
+        if (item.state === "clean") reward += REWARD_CLEAN;
       }
     }
   }

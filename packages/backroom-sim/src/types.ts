@@ -1,14 +1,14 @@
 // --- Stations (Patches) ---
 export type StationType =
-  | "receiving"
-  | "shelf"
+  | "order_window"
   | "fridge"
-  | "prep_table"
-  | "stove"
-  | "counter"
-  | "returning"
+  | "cutting_board"
+  | "burner"
+  | "resting_rack"
+  | "plating_station"
+  | "pass"
+  | "dish_return"
   | "sink"
-  | "trash"
   | "entrance"
   | "floor";
 
@@ -19,8 +19,18 @@ export interface Station {
 }
 
 // --- Items ---
-export type ItemType = "onion" | "pork" | "noodle" | "soup_base";
-export type ItemState = "raw" | "chopped" | "cooked" | "served" | "dirty" | "clean" | "stored";
+export type ItemType = "ribeye" | "sirloin" | "tenderloin" | "tbone";
+export type ItemState =
+  | "ordered"
+  | "raw"
+  | "portioned"
+  | "searing"
+  | "seared"
+  | "rested"
+  | "plated"
+  | "served"
+  | "dirty"
+  | "clean";
 
 export interface Item {
   id: number;
@@ -65,14 +75,16 @@ export interface BackroomLayout {
 // --- Config ---
 export interface SimConfig {
   workerCount: number;
-  deliverySize: number;
-  deliveryInterval: number;
+  /** Number of orders per batch */
+  orderSize: number;
+  /** Ticks between order batches */
+  orderInterval: number;
 }
 
 export const DEFAULT_CONFIG: SimConfig = {
   workerCount: 3,
-  deliverySize: 6,
-  deliveryInterval: 600,
+  orderSize: 4,
+  orderInterval: 500,
 };
 
 // --- World ---
@@ -91,4 +103,6 @@ export interface World {
   nextWorkerId: number;
   config: SimConfig;
   workflow: WorkflowGraph;
+  /** Tracking: total orders served */
+  ordersServed: number;
 }

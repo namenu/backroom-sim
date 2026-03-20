@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { BackroomEnv, AgentAction, OBS_SIZE } from "../index";
 
-describe("backroom environment", () => {
+describe("kitchen environment", () => {
   it("reset returns correct observation shape", () => {
     const env = new BackroomEnv({ sim: { workerCount: 3 } });
     const obs = env.reset();
@@ -40,7 +40,7 @@ describe("backroom environment", () => {
 
   it("random policy makes progress", () => {
     const env = new BackroomEnv({
-      sim: { workerCount: 3, deliverySize: 4, deliveryInterval: 9999 },
+      sim: { workerCount: 3, orderSize: 4, orderInterval: 9999 },
       maxTicks: 5000,
     });
     env.reset();
@@ -56,31 +56,29 @@ describe("backroom environment", () => {
     }
 
     // Random policy should at least not crash
-    // Total reward will be mostly negative (time pressure) but some positive from lucky pickups
     expect(totalReward).toBeDefined();
   });
 
   it("rule-based baseline outperforms random", async () => {
-    // Run rule-based (via tickWorld) and RL random to compare throughput
     const { createWorld, tickWorld, DEFAULT_LAYOUT } = await import("../index");
 
     // Rule-based
     const ruleWorld = createWorld(
-      { workerCount: 3, deliverySize: 4, deliveryInterval: 9999 },
+      { workerCount: 3, orderSize: 4, orderInterval: 9999 },
       DEFAULT_LAYOUT,
     );
-    for (let t = 0; t < 2000; t++) tickWorld(ruleWorld);
+    for (let t = 0; t < 3000; t++) tickWorld(ruleWorld);
     const ruleServed = ruleWorld.items.filter(
-      (i: any) => i.state === "served" || i.state === "dirty" || i.state === "clean" || i.state === "stored"
+      (i: any) => i.state === "served" || i.state === "dirty" || i.state === "clean"
     ).length;
 
     // Random RL
     const env = new BackroomEnv({
-      sim: { workerCount: 3, deliverySize: 4, deliveryInterval: 9999 },
-      maxTicks: 2000,
+      sim: { workerCount: 3, orderSize: 4, orderInterval: 9999 },
+      maxTicks: 3000,
     });
     env.reset();
-    for (let t = 0; t < 2000; t++) {
+    for (let t = 0; t < 3000; t++) {
       const actions = Array.from({ length: 3 }, () =>
         Math.floor(Math.random() * 8) as AgentAction
       );
@@ -89,7 +87,7 @@ describe("backroom environment", () => {
     }
     const rlWorld = env.getWorld();
     const rlServed = rlWorld.items.filter(
-      (i) => i.state === "served" || i.state === "dirty" || i.state === "clean" || i.state === "stored"
+      (i) => i.state === "served" || i.state === "dirty" || i.state === "clean"
     ).length;
 
     // Rule-based should do better than random

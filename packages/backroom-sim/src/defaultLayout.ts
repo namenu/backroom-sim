@@ -1,46 +1,55 @@
 import type { BackroomLayout } from "./types";
 
 /**
- * Default backroom layout — compact grid.
- * All passages are at most 2 tiles wide.
+ * Default kitchen layout — steak restaurant.
+ *
+ * 14×10 grid. Flow: order_window → fridge → cutting_board → burner
+ *                    → resting_rack → plating_station → pass
+ *                    dish_return → sink (cleanup loop)
  */
 export const DEFAULT_LAYOUT: BackroomLayout = {
-  cols: 12,
-  rows: 9,
+  cols: 14,
+  rows: 10,
   stations: [
-    // Receiving (top row)
-    { type: "receiving", x: 2, y: 0 },
-    { type: "receiving", x: 3, y: 0 },
-    { type: "receiving", x: 5, y: 0 },
-    { type: "receiving", x: 6, y: 0 },
-    // Shelves (left wall)
-    { type: "shelf", x: 0, y: 2 },
-    { type: "shelf", x: 0, y: 3 },
-    { type: "shelf", x: 0, y: 4 },
-    // Fridges (right wall)
-    { type: "fridge", x: 11, y: 2 },
-    { type: "fridge", x: 11, y: 3 },
-    // Prep tables + stoves (row 3)
-    { type: "prep_table", x: 3, y: 3 },
-    { type: "prep_table", x: 4, y: 3 },
-    { type: "prep_table", x: 6, y: 3 },
-    { type: "prep_table", x: 7, y: 3 },
-    { type: "stove", x: 8, y: 3 },
-    { type: "stove", x: 9, y: 3 },
-    // Counter / serving (row 6) — 2 rows gap from prep
-    { type: "counter", x: 4, y: 6 },
-    { type: "counter", x: 5, y: 6 },
-    { type: "counter", x: 7, y: 6 },
-    { type: "counter", x: 8, y: 6 },
-    // Returning
-    { type: "returning", x: 9, y: 6 },
-    { type: "returning", x: 10, y: 6 },
-    // Sinks (bottom-left)
-    { type: "sink", x: 1, y: 8 },
-    { type: "sink", x: 2, y: 8 },
-    // Trash (bottom-right)
-    { type: "trash", x: 11, y: 8 },
-    // Entrance (top-left corner — staff door)
+    // Entrance (top-left — staff door)
     { type: "entrance", x: 0, y: 0 },
+
+    // Order window (top, where orders arrive)
+    { type: "order_window", x: 3, y: 0 },
+    { type: "order_window", x: 4, y: 0 },
+
+    // Pass / serving window (top-right, where dishes go out)
+    { type: "pass", x: 10, y: 0 },
+    { type: "pass", x: 11, y: 0 },
+
+    // Fridges (left wall, cold storage)
+    { type: "fridge", x: 0, y: 2 },
+    { type: "fridge", x: 0, y: 3 },
+    { type: "fridge", x: 0, y: 4 },
+
+    // Cutting boards (center-left)
+    { type: "cutting_board", x: 3, y: 3 },
+    { type: "cutting_board", x: 4, y: 3 },
+
+    // Burners (center-right, the hot line)
+    { type: "burner", x: 7, y: 3 },
+    { type: "burner", x: 8, y: 3 },
+    { type: "burner", x: 9, y: 3 },
+
+    // Resting racks (center)
+    { type: "resting_rack", x: 5, y: 5 },
+    { type: "resting_rack", x: 6, y: 5 },
+
+    // Plating stations (right side)
+    { type: "plating_station", x: 11, y: 3 },
+    { type: "plating_station", x: 12, y: 3 },
+
+    // Dish return (bottom-right)
+    { type: "dish_return", x: 10, y: 7 },
+    { type: "dish_return", x: 11, y: 7 },
+
+    // Sinks (bottom-left, dishwashing)
+    { type: "sink", x: 0, y: 8 },
+    { type: "sink", x: 1, y: 8 },
   ],
 };

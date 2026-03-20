@@ -22,8 +22,8 @@ export function createWorld(
 
   const workers: Worker[] = [];
   for (let i = 0; i < config.workerCount; i++) {
-    const spawnX = 3 + (i % (config.workerCount > 6 ? 6 : 4));
-    const spawnY = 2 + Math.floor(i / (config.workerCount > 6 ? 6 : 4));
+    const spawnX = 2 + (i % (config.workerCount > 6 ? 6 : 4));
+    const spawnY = 1 + Math.floor(i / (config.workerCount > 6 ? 6 : 4));
     workers.push(createWorker(i, spawnX, spawnY));
   }
   const world: World = {
@@ -39,8 +39,10 @@ export function createWorld(
     nextWorkerId: config.workerCount,
     config,
     workflow,
+    ordersServed: 0,
   };
-  spawnDelivery(world);
+  // Spawn initial batch of orders
+  spawnOrders(world);
   return world;
 }
 
@@ -52,16 +54,27 @@ function createWorker(id: number, gx: number, gy: number): Worker {
   };
 }
 
-function spawnDelivery(world: World) {
-  const receiving = world.stations.filter((s) => s.type === "receiving");
-  const types: ItemType[] = ["onion", "pork", "noodle", "soup_base"];
-  for (let i = 0; i < world.config.deliverySize; i++) {
-    const station = receiving[i % receiving.length];
+/**
+ * Spawn a batch of steak orders at the order_window stations.
+ * Each order places a raw steak in the fridge (simulating "주문 → 냉장고에서 꺼냄").
+ * The order ticket appears at the order_window as "ordered" state,
+ * and a corresponding raw meat item is placed in the fridge.
+ */
+function spawnOrders(world: World) {
+  const orderWindows = world.stations.filter((s) => s.type === "order_window");
+  const fridges = world.stations.filter((s) => s.type === "fridge");
+  const types: ItemType[] = ["ribeye", "sirloin", "tenderloin", "tbone"];
+
+  if (orderWindows.length === 0 || fridges.length === 0) return;
+
+  for (let i = 0; i < world.config.orderSize; i++) {
+    const fridge = fridges[i % fridges.length];
+    // Place raw meat directly in fridge (ready to be picked up for processing)
     world.items.push({
       id: world.nextItemId++,
       type: types[i % types.length],
       state: "raw",
-      x: station.x, y: station.y,
+      x: fridge.x, y: fridge.y,
       carriedBy: null,
     });
   }
@@ -221,12 +234,17 @@ function work(worker: Worker, world: World) {
         if (!station) continue;
         const transition = world.workflow.findTransition(station.type, item.state);
         if (transition) {
+          const prevState = item.state;
           item.state = transition.toColor as ItemState;
           item.x = station.x;
           item.y = station.y;
           item.carriedBy = null;
           worker.carryingItem = null;
           log(world, worker.id, `done → ${item.type}[${item.state}]`);
+          // Track served orders
+          if (item.state === "served") {
+            world.ordersServed++;
+          }
           break;
         }
       }
@@ -271,23 +289,23 @@ function fireAutoTransitions(world: World) {
 
 // --- Main tick ---
 
-function rawStockCap(world: World): number {
-  return world.config.workerCount * world.config.deliverySize;
+function orderStockCap(world: World): number {
+  return world.config.workerCount * world.config.orderSize;
 }
 
-function tickDeliveries(world: World) {
-  if (world.tick % world.config.deliveryInterval === 0) {
-    const rawCount = world.items.filter(i => i.state === "raw").length;
-    if (rawCount < rawStockCap(world)) {
-      spawnDelivery(world);
+function tickOrders(world: World) {
+  if (world.tick > 0 && world.tick % world.config.orderInterval === 0) {
+    const rawCount = world.items.filter(i => i.state === "raw" || i.state === "ordered").length;
+    if (rawCount < orderStockCap(world)) {
+      spawnOrders(world);
     }
   }
 }
 
-/** Shared tick logic: deliveries, auto transitions, passive worker updates. */
+/** Shared tick logic: orders, auto transitions, passive worker updates. */
 function tickBase(world: World) {
   world.tick++;
-  tickDeliveries(world);
+  tickOrders(world);
   fireAutoTransitions(world);
 }
 

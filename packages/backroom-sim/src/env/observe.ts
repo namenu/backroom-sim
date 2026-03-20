@@ -10,35 +10,38 @@ import {
 
 const STATION_TYPE_MAP: Record<string, number> = {
   floor: 1,
-  receiving: 2,
-  shelf: 3,
-  fridge: 4,
-  prep_table: 5,
-  stove: 6,
-  counter: 7,
-  returning: 8,
-  sink: 9,
-  trash: 10,
+  order_window: 2,
+  fridge: 3,
+  cutting_board: 4,
+  burner: 5,
+  resting_rack: 6,
+  plating_station: 7,
+  pass: 8,
+  dish_return: 9,
+  sink: 10,
   entrance: 11,
 };
 const STATION_MAX = 12;
 
 const ITEM_STATE_MAP: Record<string, number> = {
-  raw: 1,
-  chopped: 2,
-  cooked: 3,
-  served: 4,
-  dirty: 5,
-  clean: 6,
-  stored: 7,
+  ordered: 1,
+  raw: 2,
+  portioned: 3,
+  searing: 4,
+  seared: 5,
+  rested: 6,
+  plated: 7,
+  served: 8,
+  dirty: 9,
+  clean: 10,
 };
-const ITEM_STATE_MAX = 7;
+const ITEM_STATE_MAX = 10;
 
 const ITEM_TYPE_MAP: Record<string, number> = {
-  onion: 1,
-  pork: 2,
-  noodle: 3,
-  soup_base: 4,
+  ribeye: 1,
+  sirloin: 2,
+  tenderloin: 3,
+  tbone: 4,
 };
 const ITEM_TYPE_MAX = 4;
 

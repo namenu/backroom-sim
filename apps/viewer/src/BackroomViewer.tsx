@@ -19,33 +19,34 @@ const ISO_TILE_W = 64;
 const ISO_TILE_H = 32;
 
 const STATION_TYPES: StationType[] = [
-  "receiving", "shelf", "fridge", "prep_table", "stove",
-  "counter", "returning", "sink", "trash", "entrance",
+  "order_window", "fridge", "cutting_board", "burner",
+  "resting_rack", "plating_station", "pass", "dish_return",
+  "sink", "entrance",
 ];
 
 const STATION_EMOJI: Record<string, string> = {
-  receiving: "📦",
-  shelf: "🗄️",
+  order_window: "📋",
   fridge: "❄️",
-  prep_table: "🔪",
-  stove: "🔥",
-  counter: "🍜",
-  returning: "🔙",
+  cutting_board: "🔪",
+  burner: "🔥",
+  resting_rack: "🧊",
+  plating_station: "🍽️",
+  pass: "🛎️",
+  dish_return: "🔙",
   sink: "🚰",
-  trash: "🗑️",
   entrance: "🚪",
 };
 
 const STATION_COLORS: Record<string, string> = {
-  receiving: "#3a5535",
-  shelf: "#6b5010",
+  order_window: "#3a5535",
   fridge: "#2e4f7a",
-  prep_table: "#5a4f40",
-  stove: "#6b3030",
-  counter: "#2a6040",
-  returning: "#5a4a60",
+  cutting_board: "#5a4f40",
+  burner: "#6b3030",
+  resting_rack: "#4a5568",
+  plating_station: "#2a6040",
+  pass: "#6b5010",
+  dish_return: "#5a4a60",
   sink: "#3a5577",
-  trash: "#4a3f30",
   entrance: "#4a6050",
 };
 
@@ -55,15 +56,15 @@ const TILE_ASSET_BASE = "/backroom-assets/tiles/";
 const CHAR_ASSET_BASE = "/backroom-assets/small-chef-cat/";
 
 const STATION_TILE_MAP: Record<string, string> = {
-  receiving: "receiving.png",
-  shelf: "shelf.png",
+  order_window: "receiving.png",
   fridge: "fridge.png",
-  prep_table: "prep_table.png",
-  stove: "stove.png",
-  counter: "counter.png",
-  returning: "returning.png",
+  cutting_board: "prep_table.png",
+  burner: "stove.png",
+  resting_rack: "shelf.png",
+  plating_station: "counter.png",
+  pass: "counter.png",
+  dish_return: "returning.png",
   sink: "sink.png",
-  trash: "trash.png",
   entrance: "entrance.png",
 };
 
@@ -145,7 +146,7 @@ export function BackroomViewer() {
   const [, setTick] = useState(0);
 
   // Editor state
-  const [tool, setTool] = useState<Tool>("receiving");
+  const [tool, setTool] = useState<Tool>("order_window");
   const [showJson, setShowJson] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
 
@@ -267,8 +268,8 @@ export function BackroomViewer() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ padding: '6px 12px', borderBottom: '1px solid #252830', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, background: '#12141c' }}>
-        <span style={{ fontWeight: 700, fontSize: 13, color: '#e8eaed' }}>Backroom Simulator</span>
-        <span style={{ fontSize: 10, color: '#555a66' }}>Multi-agent workflow simulation</span>
+        <span style={{ fontWeight: 700, fontSize: 13, color: '#e8eaed' }}>Kitchen Simulator</span>
+        <span style={{ fontSize: 10, color: '#555a66' }}>Steak restaurant workflow simulation</span>
       </div>
 
       <div className="backroom-app">
@@ -393,14 +394,14 @@ function Sidebar({
             onChange={(e) => onWorkerCountChange(Number(e.target.value))} />
         </label>
         <label>
-          Delivery: {draft.deliverySize}
-          <input type="range" min={2} max={12} value={draft.deliverySize}
-            onChange={(e) => setDraft({ ...draft, deliverySize: Number(e.target.value) })} />
+          Orders: {draft.orderSize}
+          <input type="range" min={2} max={12} value={draft.orderSize}
+            onChange={(e) => setDraft({ ...draft, orderSize: Number(e.target.value) })} />
         </label>
         <label>
-          Interval: {draft.deliveryInterval}
-          <input type="range" min={200} max={1200} step={100} value={draft.deliveryInterval}
-            onChange={(e) => setDraft({ ...draft, deliveryInterval: Number(e.target.value) })} />
+          Interval: {draft.orderInterval}
+          <input type="range" min={200} max={1200} step={100} value={draft.orderInterval}
+            onChange={(e) => setDraft({ ...draft, orderInterval: Number(e.target.value) })} />
         </label>
         <div className="sidebar-buttons">
           <button onClick={() => onReset(draft)}>Reset</button>
@@ -722,12 +723,12 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
 function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
   const served = world.items.filter((i) => i.state === "served").length;
   const dirty = world.items.filter((i) => i.state === "dirty").length;
-  const stored = world.items.filter((i) => i.state === "stored").length;
+  const clean = world.items.filter((i) => i.state === "clean").length;
   const total = world.items.length;
 
-  // Throughput: completed items per 100 ticks
+  // Throughput: completed orders per 100 ticks
   const completed = world.items.filter((i) =>
-    i.state === "served" || i.state === "dirty" || i.state === "clean" || i.state === "stored"
+    i.state === "served" || i.state === "dirty" || i.state === "clean"
   ).length;
   const throughput = world.tick > 0 ? (completed / world.tick * 100).toFixed(1) : "0.0";
 
@@ -748,8 +749,8 @@ function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number
       <span>tick: {world.tick}</span>
       <span>served: {served}</span>
       <span>dirty: {dirty}</span>
-      <span>cleaned: {stored}</span>
-      <span>items: {total}</span>
+      <span>cleaned: {clean}</span>
+      <span>orders: {total}</span>
       <span>throughput: {throughput}/100t</span>
       <span>util: {utilPct}%</span>
     </div>
@@ -856,7 +857,7 @@ function EfficiencyChart({ worldRef, statsRef }: {
 
         // Throughput: EMA of items per 1000 ticks
         const curCompleted = world.items.filter(i =>
-          i.state === "served" || i.state === "dirty" || i.state === "clean" || i.state === "stored"
+          i.state === "served" || i.state === "dirty" || i.state === "clean"
         ).length;
         const rawRate = (curCompleted - prevServed.current) * (1000 / EFF_SAMPLE_INTERVAL);
         prevServed.current = curCompleted;
@@ -997,13 +998,14 @@ function EfficiencyChart({ worldRef, statsRef }: {
 // ============================================================
 
 const CHART_STAGES = [
-  { label: "raw",     color: "#e74c3c", filter: (w: World) => w.items.filter(i => i.state === "raw").length },
-  { label: "chopped", color: "#2ecc71", filter: (w: World) => w.items.filter(i => i.state === "chopped").length },
-  { label: "cooked",  color: "#3498db", filter: (w: World) => w.items.filter(i => i.state === "cooked").length },
-  { label: "served",  color: "#9b59b6", filter: (w: World) => w.items.filter(i => i.state === "served").length },
-  { label: "dirty",   color: "#e67e22", filter: (w: World) => w.items.filter(i => i.state === "dirty").length },
-  { label: "clean",   color: "#1abc9c", filter: (w: World) => w.items.filter(i => i.state === "clean").length },
-  { label: "stored",  color: "#34495e", filter: (w: World) => w.items.filter(i => i.state === "stored").length },
+  { label: "raw",       color: "#e74c3c", filter: (w: World) => w.items.filter(i => i.state === "raw").length },
+  { label: "portioned", color: "#e67e22", filter: (w: World) => w.items.filter(i => i.state === "portioned").length },
+  { label: "seared",    color: "#f1c40f", filter: (w: World) => w.items.filter(i => i.state === "seared").length },
+  { label: "rested",    color: "#2ecc71", filter: (w: World) => w.items.filter(i => i.state === "rested").length },
+  { label: "plated",    color: "#3498db", filter: (w: World) => w.items.filter(i => i.state === "plated").length },
+  { label: "served",    color: "#9b59b6", filter: (w: World) => w.items.filter(i => i.state === "served").length },
+  { label: "dirty",     color: "#e67e22", filter: (w: World) => w.items.filter(i => i.state === "dirty").length },
+  { label: "clean",     color: "#1abc9c", filter: (w: World) => w.items.filter(i => i.state === "clean").length },
 ] as const;
 
 const SAMPLE_INTERVAL = 20;
