@@ -54,32 +54,40 @@ export const STEAK_RECIPE: Recipe = {
   floorType: "floor",
 };
 
-/** Default kitchen layout for the steak recipe — 14×10 grid. */
+/** Default kitchen layout for the steak recipe — 10×7 compact grid.
+ *
+ *   0  1  2  3  4  5  6  7  8  9
+ * 0 OW OW .  .  .  .  .  .  P  P
+ * 1 F  .  .  CB CB .  B  B  .  .
+ * 2 F  .  .  .  .  .  .  .  .  PL
+ * 3 E  .  .  RR RR .  .  .  .  PL
+ * 4 .  .  .  .  .  .  .  .  DR DR
+ * 5 .  .  .  .  .  .  .  .  .  .
+ * 6 S  S  .  .  .  .  .  .  .  .
+ */
 export const STEAK_LAYOUT: BackroomLayout = {
-  cols: 14,
-  rows: 10,
+  cols: 10,
+  rows: 7,
   stations: [
-    { type: "entrance", x: 0, y: 0 },
-    { type: "order_window", x: 3, y: 0 },
-    { type: "order_window", x: 4, y: 0 },
-    { type: "pass", x: 10, y: 0 },
-    { type: "pass", x: 11, y: 0 },
+    { type: "order_window", x: 0, y: 0 },
+    { type: "order_window", x: 1, y: 0 },
+    { type: "pass", x: 8, y: 0 },
+    { type: "pass", x: 9, y: 0 },
+    { type: "fridge", x: 0, y: 1 },
     { type: "fridge", x: 0, y: 2 },
-    { type: "fridge", x: 0, y: 3 },
-    { type: "fridge", x: 0, y: 4 },
-    { type: "cutting_board", x: 3, y: 3 },
-    { type: "cutting_board", x: 4, y: 3 },
-    { type: "burner", x: 7, y: 3 },
-    { type: "burner", x: 8, y: 3 },
-    { type: "burner", x: 9, y: 3 },
-    { type: "resting_rack", x: 5, y: 5 },
-    { type: "resting_rack", x: 6, y: 5 },
-    { type: "plating_station", x: 11, y: 3 },
-    { type: "plating_station", x: 12, y: 3 },
-    { type: "dish_return", x: 10, y: 7 },
-    { type: "dish_return", x: 11, y: 7 },
-    { type: "sink", x: 0, y: 8 },
-    { type: "sink", x: 1, y: 8 },
+    { type: "cutting_board", x: 3, y: 1 },
+    { type: "cutting_board", x: 4, y: 1 },
+    { type: "burner", x: 6, y: 1 },
+    { type: "burner", x: 7, y: 1 },
+    { type: "entrance", x: 0, y: 3 },
+    { type: "resting_rack", x: 3, y: 3 },
+    { type: "resting_rack", x: 4, y: 3 },
+    { type: "plating_station", x: 9, y: 2 },
+    { type: "plating_station", x: 9, y: 3 },
+    { type: "dish_return", x: 8, y: 4 },
+    { type: "dish_return", x: 9, y: 4 },
+    { type: "sink", x: 0, y: 6 },
+    { type: "sink", x: 1, y: 6 },
   ],
 };
 

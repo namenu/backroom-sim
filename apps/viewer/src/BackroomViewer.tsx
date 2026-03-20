@@ -1299,22 +1299,31 @@ function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<M
     let totalDone = 0;
     for (const wk of WORK_KEYS) totalDone += stats?.workDone[wk.stateKey] ?? 0;
 
+    const moving = stats ? Math.round((stats.moving / total) * 100) : 0;
+    const carrying = stats ? Math.round((stats.carrying / total) * 100) : 0;
+    const workPct = stats ? (stats.working / total) * 100 : 0;
+
     const entry: Record<string, string | number> = {
       name: `W${id}`,
       state: worker.state,
-      idle: stats ? Math.round((stats.idle / total) * 100) : 0,
-      moving: stats ? Math.round((stats.moving / total) * 100) : 0,
-      carrying: stats ? Math.round((stats.carrying / total) * 100) : 0,
+      moving,
+      carrying,
     };
 
-    const workPct = stats ? (stats.working / total) * 100 : 0;
+    let workSum = 0;
     for (const wk of WORK_KEYS) {
       const count = stats?.workDone[wk.stateKey] ?? 0;
-      entry[wk.key] = totalDone > 0 ? Math.round((count / totalDone) * workPct) : 0;
+      const v = totalDone > 0 ? Math.round((count / totalDone) * workPct) : 0;
+      entry[wk.key] = v;
+      workSum += v;
     }
     if (totalDone === 0 && workPct > 0) {
-      entry[WORK_KEYS[0].key] = Math.round(workPct);
+      const v = Math.round(workPct);
+      entry[WORK_KEYS[0].key] = v;
+      workSum = v;
     }
+    // Absorb rounding error into idle so the stack always sums to 100
+    entry.idle = Math.max(0, 100 - moving - carrying - workSum);
 
     return entry;
   });
