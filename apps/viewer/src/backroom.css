@@ -31,27 +31,19 @@
 }
 
 /* ============================================================
-   Sidebar sections
+   Sidebar controls
    ============================================================ */
-
-.sidebar-section {
-  background: #1e2028;
-  border: 1px solid #2a2d38;
-  border-radius: 4px;
-  padding: 8px 10px;
-  overflow: hidden;
-}
 
 .sidebar-section-label {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: #555a66;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   display: block;
 }
 
-.sidebar-section label {
+.backroom-sidebar label {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -61,13 +53,13 @@
   margin-bottom: 4px;
 }
 
-.sidebar-section input[type="range"] {
+.backroom-sidebar input[type="range"] {
   width: 90px;
   flex-shrink: 0;
   accent-color: #e94560;
 }
 
-.sidebar-section button {
+.backroom-sidebar button {
   background: #2a2d38;
   color: #c8ccd4;
   border: 1px solid #3a3d48;
@@ -78,7 +70,7 @@
   cursor: pointer;
 }
 
-.sidebar-section button:hover {
+.backroom-sidebar button:hover {
   background: #353840;
 }
 
@@ -152,32 +144,72 @@
   font-size: 10px;
 }
 
-/* --- Station Status (in sidebar) --- */
-.backroom-station-status {
+/* --- Process Flow --- */
+.process-flow {
   display: flex;
   flex-direction: column;
-  gap: 3px;
   font-size: 11px;
+  min-width: 160px;
 }
 
-.backroom-station-status-row {
+.process-flow-step {
   display: flex;
+  align-items: center;
   gap: 6px;
-  align-items: baseline;
+  padding: 3px 0;
 }
 
-.backroom-station-status-name {
-  color: #9a9eb0;
-  white-space: nowrap;
-  min-width: 90px;
+.process-flow-step.auto {
+  opacity: 0.45;
+}
+
+.process-flow-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.process-flow-label {
+  font-weight: 600;
+  color: #c8ccd4;
   font-size: 11px;
 }
 
-.backroom-station-status-items {
-  color: #c8ccd4;
-  font-family: monospace;
-  font-size: 10px;
+.process-flow-meta {
+  font-size: 9px;
+  color: #555a66;
 }
+
+.process-flow-worker {
+  display: inline-block;
+  background: #4a5568;
+  color: #c8ccd4;
+  font-size: 7px;
+  font-weight: 700;
+  border-radius: 2px;
+  padding: 0 3px;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+
+.process-flow-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+.process-flow-dot.waiting {
+  background: #e8a735;
+}
+
+.process-flow-dot.active {
+  background: #5dade2;
+}
+
 
 /* ============================================================
    Main area

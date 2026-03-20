@@ -17,6 +17,7 @@ import {
   type StationType,
   type Recipe,
   type WorkflowGraph,
+  type WorkflowDef,
 } from "backroom-sim";
 
 // ============================================================
@@ -189,12 +190,11 @@ export function BackroomViewer() {
     setTick(0);
   }, []);
 
-  const resetWorld = useCallback((newConfig: SimConfig) => {
-    setConfig(newConfig);
+  const resetWorld = useCallback(() => {
     const p = RECIPE_PRESETS[presetKey];
-    worldRef.current = createWorld(newConfig, layoutRef.current, p.workflow, p.recipe);
+    worldRef.current = createWorld(config, layoutRef.current, p.workflow, p.recipe);
     clearStats();
-  }, [presetKey, clearStats]);
+  }, [presetKey, config, clearStats]);
 
   // Switch recipe preset
   const switchRecipe = useCallback((key: string) => {
@@ -367,10 +367,10 @@ export function BackroomViewer() {
             />
           )}
           <IsometricGrid world={world} layout={layout} />
-          <StationStatus world={world} />
+          <ProcessFlow world={world} />
         </div>
 
-        <HUD world={world} statsRef={statsRef} />
+        <HUD world={world} />
         <div className="backroom-charts-row">
           <EfficiencyChart worldRef={worldRef} statsRef={statsRef} />
           <ThroughputChart worldRef={worldRef} />
@@ -411,7 +411,7 @@ function Sidebar({
   onShowEditorChange: (show: boolean) => void;
   onSpeedChange: (s: number) => void;
   onPausedChange: (p: boolean) => void;
-  onReset: (c: SimConfig) => void;
+  onReset: () => void;
   onGridSize: (cols: number, rows: number) => void;
   onToolChange: (t: Tool) => void;
   onWorkerCountChange: (count: number) => void;
@@ -419,97 +419,71 @@ function Sidebar({
   onLoadDefault: () => void;
   onShowJson: () => void;
 }) {
-  const [draft, setDraft] = useState({ ...config });
-
   return (
     <>
-      {/* Simulation */}
-      <div className="sidebar-section">
-        <span className="sidebar-section-label">Simulation</span>
-        <label>
-          Speed: {speed}x
-          <input type="range" min={1} max={10} value={speed}
-            onChange={(e) => onSpeedChange(Number(e.target.value))} />
-        </label>
-        <div className="sidebar-buttons">
-          <button onClick={() => onPausedChange(!paused)}>
-            {paused ? "\u25B6 Play" : "\u23F8 Pause"}
-          </button>
-        </div>
+      <span className="sidebar-section-label">Simulation</span>
+      <label>
+        Speed: {speed}x
+        <input type="range" min={1} max={10} value={speed}
+          onChange={(e) => onSpeedChange(Number(e.target.value))} />
+      </label>
+      <label>
+        Workers: {config.workerCount}
+        <input type="range" min={1} max={12} value={config.workerCount}
+          onChange={(e) => onWorkerCountChange(Number(e.target.value))} />
+      </label>
+      <div className="sidebar-buttons">
+        <button onClick={() => onPausedChange(!paused)}>
+          {paused ? "\u25B6 Play" : "\u23F8 Pause"}
+        </button>
+        <button onClick={onReset}>Reset</button>
       </div>
 
-      {/* Config */}
-      <div className="sidebar-section">
-        <span className="sidebar-section-label">Config</span>
-        <label>
-          Workers: {config.workerCount}
-          <input type="range" min={1} max={12} value={config.workerCount}
-            onChange={(e) => onWorkerCountChange(Number(e.target.value))} />
-        </label>
-        <label>
-          Orders: {draft.orderSize}
-          <input type="range" min={2} max={12} value={draft.orderSize}
-            onChange={(e) => setDraft({ ...draft, orderSize: Number(e.target.value) })} />
-        </label>
-        <label>
-          Interval: {draft.orderInterval}
-          <input type="range" min={200} max={1200} step={100} value={draft.orderInterval}
-            onChange={(e) => setDraft({ ...draft, orderInterval: Number(e.target.value) })} />
-        </label>
-        <div className="sidebar-buttons">
-          <button onClick={() => onReset(draft)}>Reset</button>
-        </div>
-      </div>
-
-      {/* Floor Editor toggle */}
-      <div className="sidebar-section">
-        <span className="sidebar-section-label" style={{ cursor: "pointer" }}
-          onClick={() => onShowEditorChange(!showEditor)}>
-          {showEditor ? "\u25BC" : "\u25B6"} Floor Editor
-        </span>
-        {showEditor && (
-          <>
-            <label>
-              Cols: {layout.cols}
-              <input type="range" min={MIN_COLS} max={MAX_COLS} value={layout.cols}
-                onChange={(e) => onGridSize(Number(e.target.value), layout.rows)} />
-            </label>
-            <label>
-              Rows: {layout.rows}
-              <input type="range" min={MIN_ROWS} max={MAX_ROWS} value={layout.rows}
-                onChange={(e) => onGridSize(layout.cols, Number(e.target.value))} />
-            </label>
-            <div className="sidebar-buttons">
-              <button onClick={onClearLayout}>Clear</button>
-              <button onClick={onLoadDefault}>Default</button>
-              <button onClick={onShowJson}>JSON</button>
-            </div>
-            <div className="mapeditor-palette">
+      <span className="sidebar-section-label" style={{ cursor: "pointer", marginTop: 8 }}
+        onClick={() => onShowEditorChange(!showEditor)}>
+        {showEditor ? "\u25BC" : "\u25B6"} Floor Editor
+      </span>
+      {showEditor && (
+        <>
+          <label>
+            Cols: {layout.cols}
+            <input type="range" min={MIN_COLS} max={MAX_COLS} value={layout.cols}
+              onChange={(e) => onGridSize(Number(e.target.value), layout.rows)} />
+          </label>
+          <label>
+            Rows: {layout.rows}
+            <input type="range" min={MIN_ROWS} max={MAX_ROWS} value={layout.rows}
+              onChange={(e) => onGridSize(layout.cols, Number(e.target.value))} />
+          </label>
+          <div className="sidebar-buttons">
+            <button onClick={onClearLayout}>Clear</button>
+            <button onClick={onLoadDefault}>Default</button>
+            <button onClick={onShowJson}>JSON</button>
+          </div>
+          <div className="mapeditor-palette">
+            <button
+              className={`mapeditor-palette-btn ${tool === "eraser" ? "active" : ""}`}
+              onClick={() => onToolChange("eraser")}
+              title="Eraser (right-click also erases)"
+            >
+              <span className="mapeditor-palette-emoji">{"\u2716"}</span>
+              <span className="mapeditor-palette-label">eraser</span>
+            </button>
+            {STATION_TYPES.map((st) => (
               <button
-                className={`mapeditor-palette-btn ${tool === "eraser" ? "active" : ""}`}
-                onClick={() => onToolChange("eraser")}
-                title="Eraser (right-click also erases)"
+                key={st}
+                className={`mapeditor-palette-btn ${tool === st ? "active" : ""}`}
+                onClick={() => onToolChange(st)}
+                title={st}
               >
-                <span className="mapeditor-palette-emoji">{"\u2716"}</span>
-                <span className="mapeditor-palette-label">eraser</span>
+                <span className="mapeditor-palette-emoji">{STATION_EMOJI[st]}</span>
+                <span className="mapeditor-palette-label">{st}</span>
               </button>
-              {STATION_TYPES.map((st) => (
-                <button
-                  key={st}
-                  className={`mapeditor-palette-btn ${tool === st ? "active" : ""}`}
-                  onClick={() => onToolChange(st)}
-                  title={st}
-                >
-                  <span className="mapeditor-palette-emoji">{STATION_EMOJI[st]}</span>
-                  <span className="mapeditor-palette-label">{st}</span>
-                </button>
-              ))}
-            </div>
-            <StationSummary layout={layout} />
-          </>
-        )}
-      </div>
-
+            ))}
+          </div>
+          <StationSummary layout={layout} />
+        </>
+      )}
     </>
   );
 }
@@ -773,39 +747,11 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
 // HUD
 // ============================================================
 
-function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
-  const stateCounts: Record<string, number> = {};
-  let completed = 0;
-  for (const item of world.items) {
-    stateCounts[item.state] = (stateCounts[item.state] ?? 0) + 1;
-    if (_visuals.completedSet.has(item.state)) completed++;
-  }
-  const total = world.items.length;
-
-  // Throughput: completed orders per 100 ticks
-  const throughput = world.tick > 0 ? (completed / world.tick * 100).toFixed(1) : "0.0";
-
-  // Avg worker utilization: (working + carrying) / total ticks
-  let utilPct = 0;
-  const stats = statsRef.current;
-  if (stats && stats.size > 0) {
-    let totalUtil = 0;
-    for (const s of stats.values()) {
-      const t = s.idle + s.moving + s.carrying + s.working;
-      if (t > 0) totalUtil += (s.working + s.carrying) / t;
-    }
-    utilPct = Math.round((totalUtil / stats.size) * 100);
-  }
-
+function HUD({ world }: { world: World }) {
   return (
     <div className="backroom-hud">
       <span>tick: {world.tick}</span>
-      {world.recipe.completedStates.map((s) => (
-        <span key={s}>{s}: {stateCounts[s] ?? 0}</span>
-      ))}
-      <span>orders: {total}</span>
-      <span>throughput: {throughput}/100t</span>
-      <span>util: {utilPct}%</span>
+      <span>orders: {world.ordersServed}</span>
     </div>
   );
 }
@@ -814,41 +760,131 @@ function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number
 // Station Status
 // ============================================================
 
-function StationStatus({ world }: { world: World }) {
-  const stationTypes = new Map<string, { count: number; items: typeof world.items }>();
-  for (const s of world.stations) {
-    if (!stationTypes.has(s.type)) {
-      stationTypes.set(s.type, { count: 0, items: [] });
+function StationTile({ type, size = 24 }: { type: string; size?: number }) {
+  const asset = STATION_TILE_MAP[type];
+  if (!asset) return null;
+  return (
+    <img
+      src={TILE_ASSET_BASE + asset}
+      alt={type}
+      style={{ width: size, height: size, imageRendering: "pixelated", verticalAlign: "middle", flexShrink: 0 }}
+    />
+  );
+}
+
+/** Merged pipeline step: worker + auto transition pair shown as one */
+interface PipelineStep {
+  label: string;
+  placeId: string;
+  fromColor: string;
+  toColor: string;
+  totalDuration: number;
+  /** Intermediate state being processed (e.g., "searing") */
+  processingState: string | null;
+  isAutoOnly: boolean;
+  /** Worker is blocked for full duration (vs. place-and-leave) */
+  workerActive: boolean;
+}
+
+function buildPipelineSteps(workflow: WorkflowDef): PipelineStep[] {
+  const transitions = workflow.transitions;
+  const steps: PipelineStep[] = [];
+  const consumed = new Set<number>();
+
+  for (let i = 0; i < transitions.length; i++) {
+    if (consumed.has(i)) continue;
+    const t = transitions[i];
+
+    if (!t.auto) {
+      // Look for a paired auto transition: same placeId, fromColor === t.toColor
+      const autoIdx = transitions.findIndex(
+        (a, j) => j > i && !consumed.has(j) && a.auto && a.placeId === t.placeId && a.fromColor === t.toColor
+      );
+      if (autoIdx >= 0) {
+        const auto = transitions[autoIdx];
+        consumed.add(autoIdx);
+        steps.push({
+          label: auto.id,
+          placeId: t.placeId,
+          fromColor: t.fromColor,
+          toColor: auto.toColor,
+          totalDuration: t.duration + auto.duration,
+          processingState: t.toColor,
+          isAutoOnly: false,
+          workerActive: false,
+        });
+      } else {
+        // Standalone worker transition (e.g., "portion", "plate", "wash")
+        steps.push({
+          label: t.id,
+          placeId: t.placeId,
+          fromColor: t.fromColor,
+          toColor: t.toColor,
+          totalDuration: t.duration,
+          processingState: null,
+          isAutoOnly: false,
+          workerActive: true,
+        });
+      }
+    } else {
+      // Standalone auto transition (e.g., "return")
+      steps.push({
+        label: t.id,
+        placeId: t.placeId,
+        fromColor: t.fromColor,
+        toColor: t.toColor,
+        totalDuration: t.duration,
+        processingState: null,
+        isAutoOnly: true,
+        workerActive: false,
+      });
     }
-    stationTypes.get(s.type)!.count++;
   }
+  return steps;
+}
+
+function ProcessFlow({ world }: { world: World }) {
+  const steps = useMemo(() => buildPipelineSteps(world.workflow.def), [world.workflow]);
+  const stageColorMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const s of world.recipe.chartStages) m[s.state] = s.color;
+    return m;
+  }, [world.recipe]);
+
+  // Count items per state
+  const stateCounts: Record<string, number> = {};
   for (const item of world.items) {
-    if (item.carriedBy !== null) continue;
-    const patch = world.stations.find((s) => s.x === item.x && s.y === item.y);
-    if (patch && stationTypes.has(patch.type)) {
-      stationTypes.get(patch.type)!.items.push(item);
-    }
+    stateCounts[item.state] = (stateCounts[item.state] ?? 0) + 1;
+  }
+
+  // Count stations per type
+  const stationCounts: Record<string, number> = {};
+  for (const s of world.stations) {
+    stationCounts[s.type] = (stationCounts[s.type] ?? 0) + 1;
   }
 
   return (
-    <div className="backroom-station-status">
-      {[...stationTypes.entries()].map(([type, { count, items }]) => {
-        const stateCounts = new Map<string, number>();
-        for (const it of items) {
-          stateCounts.set(it.state, (stateCounts.get(it.state) ?? 0) + 1);
-        }
-        const summary = [...stateCounts.entries()]
-          .map(([state, n]) => `${state}:${n}`)
-          .join(" ");
-
+    <div className="process-flow">
+      {steps.map((step, i) => {
+        const waiting = stateCounts[step.fromColor] ?? 0;
+        const processing = step.processingState ? (stateCounts[step.processingState] ?? 0) : 0;
+        const stations = stationCounts[step.placeId] ?? 0;
         return (
-          <div key={type} className="backroom-station-status-row">
-            <span className="backroom-station-status-name">
-              {STATION_EMOJI[type] ?? ""} {type} ×{count}
-            </span>
-            <span className="backroom-station-status-items">
-              {summary || "—"}
-            </span>
+          <div key={step.label} className={`process-flow-step${step.isAutoOnly ? " auto" : ""}`}>
+            <StationTile type={step.placeId} size={28} />
+            <div className="process-flow-detail">
+              <span className="process-flow-label">{step.label}</span>
+              <span className="process-flow-meta">
+                {step.workerActive && <span className="process-flow-worker" title="worker stays">W</span>}
+                {step.totalDuration}t · ×{stations}
+                {(waiting > 0 || processing > 0) && <>{" · "}
+                  {Array.from({ length: Math.min(waiting, 12) }, (_, i) => <span key={`w${i}`} className="process-flow-dot waiting" />)}
+                  {waiting > 12 && <span className="process-flow-meta">+{waiting - 12}</span>}
+                  {Array.from({ length: Math.min(processing, 12) }, (_, i) => <span key={`p${i}`} className="process-flow-dot active" />)}
+                  {processing > 12 && <span className="process-flow-meta">+{processing - 12}</span>}
+                </>}
+              </span>
+            </div>
           </div>
         );
       })}
@@ -1230,27 +1266,31 @@ interface WorkerStatsData { idle: number; moving: number; carrying: number; work
 // Vivid colors for work actions, muted for idle/moving
 const WORK_COLORS = ["#ff6b6b", "#ffa94d", "#cc5de8", "#20c997", "#339af0"];
 
-function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
-  const workflow = world.workflow;
-  const { segments: RATIO_SEGMENTS, workKeys: WORK_KEYS } = useMemo(() => {
-    const transitions = workflow.def.transitions.filter((t) => !t.auto);
+// Worker chart segments: only non-auto transitions (what workers actually do),
+// with merged pipeline step names for labels
+const _pipelineSteps = buildPipelineSteps(DEFAULT_WORKFLOW_DEF);
+const _workerTransitions = DEFAULT_WORKFLOW_DEF.transitions.filter((t) => !t.auto);
+
+const RATIO_SEGMENTS = [
+  ..._workerTransitions.map((t, i) => {
+    const step = _pipelineSteps.find((s) => s.placeId === t.placeId && !s.isAutoOnly && s.fromColor === t.fromColor);
     return {
-      segments: [
-        ...transitions.map((t, i) => ({
-          key: `wk_${t.id}`,
-          label: t.id,
-          color: WORK_COLORS[i % WORK_COLORS.length],
-        })),
-        { key: "carrying", label: "carrying", color: "#4a5568" },
-        { key: "moving", label: "moving", color: "#3d4050" },
-        { key: "idle", label: "idle", color: "#2a2d38" },
-      ],
-      workKeys: transitions.map((t) => ({
-        key: `wk_${t.id}`,
-        stateKey: t.toColor,
-      })),
+      key: `wk_${t.id}`,
+      label: step?.label ?? t.id,
+      color: WORK_COLORS[i % WORK_COLORS.length],
     };
-  }, [workflow]);
+  }),
+  { key: "carrying", label: "carrying", color: "#4a5568" },
+  { key: "moving", label: "moving", color: "#3d4050" },
+  { key: "idle", label: "idle", color: "#2a2d38" },
+];
+
+const WORK_KEYS = _workerTransitions.map((t) => ({
+  key: `wk_${t.id}`,
+  stateKey: t.toColor,
+}));
+
+function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
   // Only show active workers (not departed)
   const data = world.workers.map((worker) => {
     const id = worker.id;
@@ -1282,7 +1322,7 @@ function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<M
   return (
     <div className="backroom-worker-chart">
       <ResponsiveContainer width="100%" height={CHART_H}>
-        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
+        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
           <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 10 }} />
           <YAxis domain={[0, 100]} tick={{ fill: "#888", fontSize: 10 }} hide />
           <Tooltip
@@ -1294,7 +1334,7 @@ function WorkerStatus({ world, statsRef }: { world: World; statsRef: RefObject<M
               return w ? `${label} (${w.state})` : String(label);
             }}
           />
-          <RLegend wrapperStyle={{ fontSize: 9 }} />
+          <RLegend wrapperStyle={{ fontSize: 9, lineHeight: "14px" }} iconSize={8} />
           {RATIO_SEGMENTS.map((seg) => (
             <Bar key={seg.key} dataKey={seg.key} name={seg.label} stackId="ratio" fill={seg.color} isAnimationActive={false} activeBar={false} />
           ))}

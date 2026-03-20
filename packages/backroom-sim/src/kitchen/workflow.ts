@@ -4,15 +4,18 @@ import { WorkflowGraph } from "../workflow/graph";
 /**
  * Steak recipe workflow — models a full steak cooking pipeline.
  *
- * 1. 주문 접수 (order_window)  — orders arrive here
- * 2. 냉장고에서 꺼냄 (fridge)   — meat storage
- * 3. 정량대로 자름 (cutting_board) — raw → portioned
- * 4. 화구에서 굽기 (burner)     — portioned → seared
- * 5. 레스팅 (resting_rack)     — seared → rested
- * 6. 플레이팅 (plating_station) — rested → plated
- * 7. 서빙 (pass)              — plated → served
- * 8. 자동 반납 (dish_return)   — served → dirty (auto)
- * 9. 설거지 (sink)             — dirty → clean
+ * Worker-active (worker blocked for full duration):
+ *   portion:  cutting_board  raw → portioned       120t
+ *   plate:    plating_station rested → plated       40t
+ *   serve:    pass           plated → served         2t
+ *   wash:     sink           dirty → clean           80t
+ *
+ * Place + auto (worker places in 2t, station processes independently):
+ *   sear:     burner         portioned → seared    180t (2t + 178t auto)
+ *   rest:     resting_rack   seared → rested        60t (2t + 58t auto)
+ *
+ * Auto-only (no worker needed):
+ *   return:   pass           served → dirty         100t (moves to dish_return)
  */
 export const DEFAULT_WORKFLOW_DEF: WorkflowDef = {
   places: [
@@ -28,13 +31,22 @@ export const DEFAULT_WORKFLOW_DEF: WorkflowDef = {
     { id: "entrance", role: "entrance" },
   ],
   transitions: [
-    { id: "portion", placeId: "cutting_board", fromColor: "raw", toColor: "portioned", duration: 120 },
-    { id: "sear", placeId: "burner", fromColor: "portioned", toColor: "seared", duration: 180 },
-    { id: "rest", placeId: "resting_rack", fromColor: "seared", toColor: "rested", duration: 60 },
-    { id: "plate", placeId: "plating_station", fromColor: "rested", toColor: "plated", duration: 40 },
-    { id: "serve", placeId: "pass", fromColor: "plated", toColor: "served", duration: 20 },
-    { id: "return", placeId: "pass", fromColor: "served", toColor: "dirty", duration: 100, auto: true, targetPlaceId: "dish_return" },
-    { id: "wash", placeId: "sink", fromColor: "dirty", toColor: "clean", duration: 80 },
+    // Worker-active: worker stays and works for full duration
+    { id: "portion",    placeId: "cutting_board",   fromColor: "raw",        toColor: "portioned", duration: 120 },
+    // Place + auto: worker places (2t), burner cooks by itself
+    { id: "place-sear", placeId: "burner",          fromColor: "portioned",  toColor: "searing",   duration: 2 },
+    { id: "sear",       placeId: "burner",          fromColor: "searing",    toColor: "seared",    duration: 178, auto: true },
+    // Place + auto: worker places (2t), meat rests by itself
+    { id: "place-rest", placeId: "resting_rack",    fromColor: "seared",     toColor: "resting",   duration: 2 },
+    { id: "rest",       placeId: "resting_rack",    fromColor: "resting",    toColor: "rested",    duration: 58,  auto: true },
+    // Worker-active: worker plates the dish
+    { id: "plate",      placeId: "plating_station", fromColor: "rested",     toColor: "plated",    duration: 40 },
+    // Worker-active: quick handoff
+    { id: "serve",      placeId: "pass",            fromColor: "plated",     toColor: "served",    duration: 2 },
+    // Auto-only: customer eats, dishes return
+    { id: "return",     placeId: "pass",            fromColor: "served",     toColor: "dirty",     duration: 100, auto: true, targetPlaceId: "dish_return" },
+    // Worker-active: worker scrubs dishes
+    { id: "wash",       placeId: "sink",            fromColor: "dirty",      toColor: "clean",     duration: 80 },
   ],
   defaultStorageId: "fridge",
   storageRoutes: [],

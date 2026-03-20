@@ -36,7 +36,9 @@ export const STEAK_RECIPE: Recipe = {
   chartStages: [
     { label: "raw",       state: "raw",       color: "#e74c3c" },
     { label: "portioned", state: "portioned", color: "#e67e22" },
+    { label: "searing",   state: "searing",   color: "#b7950b" },
     { label: "seared",    state: "seared",    color: "#f1c40f" },
+    { label: "resting",   state: "resting",   color: "#1e8449" },
     { label: "rested",    state: "rested",    color: "#2ecc71" },
     { label: "plated",    state: "plated",    color: "#3498db" },
     { label: "served",    state: "served",    color: "#9b59b6" },

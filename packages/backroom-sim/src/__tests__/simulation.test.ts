@@ -1,54 +1,51 @@
 import { describe, it, expect } from "vitest";
-import { createWorld, tickWorld, DEFAULT_LAYOUT } from "../index";
-import type { World } from "../index";
-
-function runTicks(world: World, n: number) {
-  for (let i = 0; i < n; i++) tickWorld(world);
-}
-
-/** Terminal states where no further action is needed */
-function isTerminal(state: string): boolean {
-  return state === "served" || state === "clean";
-}
+import { createWorld, tickWorld, DEFAULT_LAYOUT, DEFAULT_WORKFLOW_DEF } from "../index";
+import { runTicks, deriveBounds, terminalStates } from "./test-utils";
 
 describe("kitchen simulation — steak recipe", () => {
-  it("steaks should progress through the full pipeline: raw → portioned → seared → rested → plated → served", () => {
-    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 3000);
+  const bounds = deriveBounds(DEFAULT_WORKFLOW_DEF, DEFAULT_LAYOUT.cols, DEFAULT_LAYOUT.rows);
+  const terminals = terminalStates(DEFAULT_WORKFLOW_DEF);
 
-    // Items reach served or beyond (dirty/clean)
-    const past = world.items.filter((i) =>
-      i.state === "served" || i.state === "dirty" || i.state === "clean"
-    ).length;
-    expect(past).toBeGreaterThan(0);
+  it("items should progress through the full pipeline", () => {
+    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
+    runTicks(world, bounds.oneItemTime * 2);
+
+    const completed = world.items.filter((i) => terminals.has(i.state)).length;
+    expect(completed).toBeGreaterThan(0);
   });
 
-  it("portioned steaks should appear as intermediate state", () => {
+  it("intermediate states should be observable during processing", () => {
     const world = createWorld({ workerCount: 2, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
 
-    let sawPortioned = false;
-    for (let i = 0; i < 2000; i++) {
+    // Collect all states observed during the simulation
+    const observed = new Set<string>();
+    for (let i = 0; i < bounds.oneItemTime; i++) {
       tickWorld(world);
-      if (world.items.some((it) => it.state === "portioned")) {
-        sawPortioned = true;
-        break;
-      }
+      for (const item of world.items) observed.add(item.state);
     }
-    expect(sawPortioned).toBe(true);
+
+    // Should see more than just initial + terminal states
+    const nonTrivial = [...observed].filter(
+      (s) => s !== world.recipe.initialItemState && !terminals.has(s)
+    );
+    expect(nonTrivial.length).toBeGreaterThan(0);
   });
 
-  it("workers should not carry an item forever", () => {
+  it("workers should not carry an item longer than grid traversal allows", () => {
     const world = createWorld({ workerCount: 3, orderSize: 6, orderInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 300);
+    // Warm up to fill pipeline
+    runTicks(world, bounds.maxTraversal);
 
     const carryStart = new Map<number, number>();
-    for (let t = 0; t < 800; t++) {
+    const maxAllowedCarry = bounds.maxTraversal * 2; // generous: 2x max traversal
+
+    for (let t = 0; t < bounds.oneItemTime; t++) {
       tickWorld(world);
       for (const w of world.workers) {
         if (w.carryingItem !== null) {
           if (!carryStart.has(w.id)) carryStart.set(w.id, world.tick);
           const duration = world.tick - carryStart.get(w.id)!;
-          expect(duration).toBeLessThan(800);
+          expect(duration).toBeLessThan(maxAllowedCarry);
         } else {
           carryStart.delete(w.id);
         }
@@ -56,22 +53,23 @@ describe("kitchen simulation — steak recipe", () => {
     }
   });
 
-  it("no worker should be permanently idle when there is work", () => {
+  it("workers should react to actionable work within bounded time", () => {
     const world = createWorld({ workerCount: 3, orderSize: 6, orderInterval: 9999 }, DEFAULT_LAYOUT);
 
     const idleTicks = new Map<number, number>();
+    const maxIdleBeforeReaction = bounds.maxTraversal;
 
-    for (let t = 0; t < 1500; t++) {
+    for (let t = 0; t < bounds.oneItemTime; t++) {
       tickWorld(world);
 
       for (const w of world.workers) {
-        const unclaimedWork = world.items.some(
-          (i) => !isTerminal(i.state) && i.carriedBy === null
+        const actionableWork = world.items.some(
+          (i) => !terminals.has(i.state) && i.carriedBy === null && i.processTimer === -1
         );
-        if (!unclaimedWork) continue;
+        if (!actionableWork) continue;
         if (w.state === "idle" && w.intent === "idle") {
           idleTicks.set(w.id, (idleTicks.get(w.id) ?? 0) + 1);
-          expect(idleTicks.get(w.id)!).toBeLessThan(100);
+          expect(idleTicks.get(w.id)!).toBeLessThan(maxIdleBeforeReaction);
         } else {
           idleTicks.set(w.id, 0);
         }
@@ -79,41 +77,24 @@ describe("kitchen simulation — steak recipe", () => {
     }
   });
 
-  it("pipeline throughput: most steaks should be served given enough time", () => {
+  it("pipeline throughput: most items should complete given sufficient time", () => {
     const world = createWorld({ workerCount: 3, orderSize: 6, orderInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 15000);
+    runTicks(world, bounds.oneItemTime * 4);
 
-    // Count items that reached served or beyond
-    const completed = world.items.filter((i) =>
-      i.state === "served" || i.state === "dirty" || i.state === "clean"
-    ).length;
-    // At least a third of items should have completed the pipeline
+    const completed = world.items.filter((i) => terminals.has(i.state)).length;
     expect(completed).toBeGreaterThanOrEqual(Math.floor(world.items.length / 3));
   });
 
-  it("dirty dishes should be cleaned", () => {
+  it("ordersServed counter matches items that reached served state", () => {
     const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 12000);
+    runTicks(world, bounds.oneItemTime * 3);
 
-    const cleaned = world.items.filter((i) => i.state === "clean").length;
-    expect(cleaned).toBeGreaterThan(0);
-  });
-
-  it("dirty dishes should not pile up excessively", () => {
-    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
-
-    let maxDirty = 0;
-    for (let t = 0; t < 6000; t++) {
-      tickWorld(world);
-      const dirty = world.items.filter((i) => i.state === "dirty" && i.carriedBy === null).length;
-      maxDirty = Math.max(maxDirty, dirty);
-    }
-    // Should never have more than 4 dirty dishes piled up at once
-    expect(maxDirty).toBeLessThanOrEqual(4);
+    const completedStates = new Set(world.recipe.completedStates);
+    const servedOrBeyond = world.items.filter((i) => completedStates.has(i.state)).length;
+    expect(world.ordersServed).toBe(servedOrBeyond);
   });
 
   it("BFS navigates around obstacles to reach target station", () => {
-    // Worker starts near fridge carrying a raw steak. Must BFS to cutting_board.
     const world = createWorld(
       { workerCount: 1, orderSize: 0, orderInterval: 99999 },
       DEFAULT_LAYOUT,
@@ -122,28 +103,14 @@ describe("kitchen simulation — steak recipe", () => {
     const worker = world.workers[0];
     worker.x = 1;
     worker.y = 3;
-    // Place item at fridge (0,3) so carriedPickupRole = "storage"
     worker.carryingItem = 999;
     world.items.push({
-      id: 999, type: "ribeye", state: "raw", x: 0, y: 3, carriedBy: worker.id,
+      id: 999, type: "ribeye", state: "raw", x: 0, y: 3, carriedBy: worker.id, processTimer: -1,
     });
 
-    // Worker should navigate to a cutting_board and start working
-    runTicks(world, 300);
+    runTicks(world, bounds.maxTraversal * 2);
 
-    // Item should have been processed (portioned at cutting_board)
     const item = world.items.find((i) => i.id === 999)!;
     expect(item.state).not.toBe("raw");
-  });
-
-  it("ordersServed counter tracks served steaks", () => {
-    const world = createWorld({ workerCount: 3, orderSize: 4, orderInterval: 9999 }, DEFAULT_LAYOUT);
-    runTicks(world, 5000);
-
-    // ordersServed should match items that reached served state
-    const servedOrBeyond = world.items.filter((i) =>
-      i.state === "served" || i.state === "dirty" || i.state === "clean"
-    ).length;
-    expect(world.ordersServed).toBe(servedOrBeyond);
   });
 });

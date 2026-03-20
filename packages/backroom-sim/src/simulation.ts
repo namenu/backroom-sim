@@ -74,6 +74,7 @@ function spawnOrders(world: World) {
       state: world.recipe.initialItemState,
       x: station.x, y: station.y,
       carriedBy: null,
+      processTimer: -1,
     });
   }
 }
@@ -264,10 +265,27 @@ function fireAutoTransitions(world: World) {
     const stationType = patchAt(world, item.x, item.y);
     if (stationType === world.recipe.floorType) continue;
 
+    // Tick down active timers
+    if (item.processTimer > 0) {
+      item.processTimer--;
+      continue;
+    }
+
     for (const t of world.workflow.autoTransitionsAt(stationType)) {
       if (t.fromColor !== item.state) continue;
-      if (world.tick % t.duration !== item.id % t.duration) continue;
+
+      // Start countdown on first match
+      if (item.processTimer === -1) {
+        item.processTimer = t.duration;
+        break;
+      }
+
+      // Timer reached 0 — fire transition
       item.state = t.toColor as ItemState;
+      item.processTimer = -1;
+      if (item.state === world.recipe.servedState) {
+        world.ordersServed++;
+      }
       if (t.targetPlaceId) {
         const targets = world.stations.filter(s => s.type === t.targetPlaceId);
         if (targets.length > 0) {

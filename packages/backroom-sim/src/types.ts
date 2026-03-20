@@ -20,6 +20,8 @@ export interface Item {
   x: number;
   y: number;
   carriedBy: number | null;
+  /** Countdown timer for station-driven (auto) processing. -1 = not processing. */
+  processTimer: number;
 }
 
 // --- Workers (Turtles) ---
