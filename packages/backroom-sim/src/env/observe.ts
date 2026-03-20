@@ -1,4 +1,4 @@
-import type { World, Worker } from "../types";
+import type { World, Worker, Recipe } from "../types";
 import { patchAt } from "../helpers";
 import {
   type Observation,
@@ -6,44 +6,50 @@ import {
   OBS_SIZE,
 } from "./types";
 
-// ─── Encoding maps ──────────────────────────────────────────
+// ─── Dynamic encoding ──────────────────────────────────────
 
-const STATION_TYPE_MAP: Record<string, number> = {
-  floor: 1,
-  order_window: 2,
-  fridge: 3,
-  cutting_board: 4,
-  burner: 5,
-  resting_rack: 6,
-  plating_station: 7,
-  pass: 8,
-  dish_return: 9,
-  sink: 10,
-  entrance: 11,
-};
-const STATION_MAX = 12;
+function buildStationMap(recipe: Recipe): { map: Record<string, number>; max: number } {
+  const map: Record<string, number> = { [recipe.floorType]: 1 };
+  let idx = 2;
+  for (const st of recipe.stationTypes) {
+    map[st] = idx++;
+  }
+  return { map, max: idx };
+}
 
-const ITEM_STATE_MAP: Record<string, number> = {
-  ordered: 1,
-  raw: 2,
-  portioned: 3,
-  searing: 4,
-  seared: 5,
-  rested: 6,
-  plated: 7,
-  served: 8,
-  dirty: 9,
-  clean: 10,
-};
-const ITEM_STATE_MAX = 10;
+function buildItemStateMap(recipe: Recipe): { map: Record<string, number>; max: number } {
+  const map: Record<string, number> = {};
+  let idx = 1;
+  for (const stage of recipe.chartStages) {
+    if (!(stage.state in map)) {
+      map[stage.state] = idx++;
+    }
+  }
+  return { map, max: idx };
+}
 
-const ITEM_TYPE_MAP: Record<string, number> = {
-  ribeye: 1,
-  sirloin: 2,
-  tenderloin: 3,
-  tbone: 4,
-};
-const ITEM_TYPE_MAX = 4;
+function buildItemTypeMap(recipe: Recipe): { map: Record<string, number>; max: number } {
+  const map: Record<string, number> = {};
+  let idx = 1;
+  for (const t of recipe.itemTypes) {
+    map[t] = idx++;
+  }
+  return { map, max: idx };
+}
+
+// Cache maps per recipe (reference equality)
+let _cachedRecipe: Recipe | null = null;
+let _stationMap: { map: Record<string, number>; max: number };
+let _itemStateMap: { map: Record<string, number>; max: number };
+let _itemTypeMap: { map: Record<string, number>; max: number };
+
+function ensureMaps(recipe: Recipe) {
+  if (_cachedRecipe === recipe) return;
+  _cachedRecipe = recipe;
+  _stationMap = buildStationMap(recipe);
+  _itemStateMap = buildItemStateMap(recipe);
+  _itemTypeMap = buildItemTypeMap(recipe);
+}
 
 // ─── Observation extraction ─────────────────────────────────
 
@@ -53,11 +59,20 @@ const ITEM_TYPE_MAX = 4;
  * Layout: 7×7 grid (row-major) × 4 channels, then 2 agent features.
  */
 export function observe(world: World, worker: Worker): Observation {
+  ensureMaps(world.recipe);
+
   const obs = new Float32Array(OBS_SIZE);
   let idx = 0;
 
-  // Build spatial lookups for this view (avoids 49 × O(N) scans)
   const { cols, rows } = world;
+  const STATION_MAP = _stationMap.map;
+  const STATION_MAX = _stationMap.max;
+  const ITEM_STATE_MAP = _itemStateMap.map;
+  const ITEM_STATE_MAX = _itemStateMap.max;
+  const ITEM_TYPE_MAP = _itemTypeMap.map;
+  const ITEM_TYPE_MAX = _itemTypeMap.max;
+
+  // Build spatial lookups
   const itemGrid = new Map<number, typeof world.items[0]>();
   for (const item of world.items) {
     if (item.carriedBy !== null) continue;
@@ -85,18 +100,15 @@ export function observe(world: World, worker: Worker): Observation {
 
       const key = gy * cols + gx;
 
-      // Station type
       const stationType = world.stationTileSet.has(`${gx},${gy}`)
         ? patchAt(world, gx, gy)
-        : "floor";
-      obs[idx++] = (STATION_TYPE_MAP[stationType] ?? 0) / STATION_MAX;
+        : world.recipe.floorType;
+      obs[idx++] = (STATION_MAP[stationType] ?? 0) / STATION_MAX;
 
-      // Item at this cell
       const item = itemGrid.get(key);
       obs[idx++] = item ? 1 : 0;
       obs[idx++] = item ? (ITEM_STATE_MAP[item.state] ?? 0) / ITEM_STATE_MAX : 0;
 
-      // Other worker at this cell
       obs[idx++] = workerGrid.has(key) ? 1 : 0;
     }
   }

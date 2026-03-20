@@ -6,10 +6,12 @@ import {
   DEFAULT_LAYOUT,
   DEFAULT_CONFIG,
   DEFAULT_WORKFLOW_DEF,
+  STEAK_RECIPE,
   type World,
   type SimConfig,
   type BackroomLayout,
   type StationType,
+  type Recipe,
 } from "backroom-sim";
 
 const TILE_SIZE = 36;
@@ -18,55 +20,36 @@ const TILE_SIZE = 36;
 const ISO_TILE_W = 64;
 const ISO_TILE_H = 32;
 
-const STATION_TYPES: StationType[] = [
-  "order_window", "fridge", "cutting_board", "burner",
-  "resting_rack", "plating_station", "pass", "dish_return",
-  "sink", "entrance",
-];
+// ============================================================
+// Recipe-driven visual metadata
+// All visual mappings are derived from the active recipe.
+// To add a new concept, create a new Recipe and swap it in.
+// ============================================================
 
-const STATION_EMOJI: Record<string, string> = {
-  order_window: "📋",
-  fridge: "❄️",
-  cutting_board: "🔪",
-  burner: "🔥",
-  resting_rack: "🧊",
-  plating_station: "🍽️",
-  pass: "🛎️",
-  dish_return: "🔙",
-  sink: "🚰",
-  entrance: "🚪",
-};
+const ACTIVE_RECIPE: Recipe = STEAK_RECIPE;
 
-const STATION_COLORS: Record<string, string> = {
-  order_window: "#3a5535",
-  fridge: "#2e4f7a",
-  cutting_board: "#5a4f40",
-  burner: "#6b3030",
-  resting_rack: "#4a5568",
-  plating_station: "#2a6040",
-  pass: "#6b5010",
-  dish_return: "#5a4a60",
-  sink: "#3a5577",
-  entrance: "#4a6050",
-};
+/** Station types, derived from recipe */
+const STATION_TYPES: StationType[] = [...ACTIVE_RECIPE.stationTypes];
+
+/** Emoji per station, derived from recipe stationMeta */
+const STATION_EMOJI: Record<string, string> = Object.fromEntries(
+  Object.entries(ACTIVE_RECIPE.stationMeta).map(([k, v]) => [k, v.emoji])
+);
+
+/** Color per station, derived from recipe stationMeta */
+const STATION_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(ACTIVE_RECIPE.stationMeta).map(([k, v]) => [k, v.color])
+);
+
+/** Tile asset filename per station, derived from recipe stationMeta */
+const STATION_TILE_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(ACTIVE_RECIPE.stationMeta).map(([k, v]) => [k, v.tileAsset])
+);
 
 const WORKER_COLORS = ["#44bbee", "#ee7744", "#66dd55", "#dd66cc", "#ddaa33", "#55cccc"];
 
 const TILE_ASSET_BASE = "/backroom-assets/tiles/";
 const CHAR_ASSET_BASE = "/backroom-assets/small-chef-cat/";
-
-const STATION_TILE_MAP: Record<string, string> = {
-  order_window: "receiving.png",
-  fridge: "fridge.png",
-  cutting_board: "prep_table.png",
-  burner: "stove.png",
-  resting_rack: "shelf.png",
-  plating_station: "counter.png",
-  pass: "counter.png",
-  dish_return: "returning.png",
-  sink: "sink.png",
-  entrance: "entrance.png",
-};
 
 const MIN_COLS = 6;
 const MAX_COLS = 30;
@@ -721,15 +704,16 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
 // ============================================================
 
 function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number, WorkerStatsData>> }) {
-  const served = world.items.filter((i) => i.state === "served").length;
-  const dirty = world.items.filter((i) => i.state === "dirty").length;
-  const clean = world.items.filter((i) => i.state === "clean").length;
+  const completedSet = new Set(ACTIVE_RECIPE.completedStates);
+  const stateCounts: Record<string, number> = {};
+  let completed = 0;
+  for (const item of world.items) {
+    stateCounts[item.state] = (stateCounts[item.state] ?? 0) + 1;
+    if (completedSet.has(item.state)) completed++;
+  }
   const total = world.items.length;
 
   // Throughput: completed orders per 100 ticks
-  const completed = world.items.filter((i) =>
-    i.state === "served" || i.state === "dirty" || i.state === "clean"
-  ).length;
   const throughput = world.tick > 0 ? (completed / world.tick * 100).toFixed(1) : "0.0";
 
   // Avg worker utilization: (working + carrying) / total ticks
@@ -747,9 +731,9 @@ function HUD({ world, statsRef }: { world: World; statsRef: RefObject<Map<number
   return (
     <div className="backroom-hud">
       <span>tick: {world.tick}</span>
-      <span>served: {served}</span>
-      <span>dirty: {dirty}</span>
-      <span>cleaned: {clean}</span>
+      {ACTIVE_RECIPE.completedStates.map((s) => (
+        <span key={s}>{s}: {stateCounts[s] ?? 0}</span>
+      ))}
       <span>orders: {total}</span>
       <span>throughput: {throughput}/100t</span>
       <span>util: {utilPct}%</span>
@@ -856,9 +840,8 @@ function EfficiencyChart({ worldRef, statsRef }: {
         data.ticks.push(world.tick);
 
         // Throughput: EMA of items per 1000 ticks
-        const curCompleted = world.items.filter(i =>
-          i.state === "served" || i.state === "dirty" || i.state === "clean"
-        ).length;
+        const _completedSet = new Set(ACTIVE_RECIPE.completedStates);
+        const curCompleted = world.items.filter(i => _completedSet.has(i.state)).length;
         const rawRate = (curCompleted - prevServed.current) * (1000 / EFF_SAMPLE_INTERVAL);
         prevServed.current = curCompleted;
         const alpha = 0.15; // smoothing factor
@@ -997,16 +980,11 @@ function EfficiencyChart({ worldRef, statsRef }: {
 // Throughput Chart (item states)
 // ============================================================
 
-const CHART_STAGES = [
-  { label: "raw",       color: "#e74c3c", filter: (w: World) => w.items.filter(i => i.state === "raw").length },
-  { label: "portioned", color: "#e67e22", filter: (w: World) => w.items.filter(i => i.state === "portioned").length },
-  { label: "seared",    color: "#f1c40f", filter: (w: World) => w.items.filter(i => i.state === "seared").length },
-  { label: "rested",    color: "#2ecc71", filter: (w: World) => w.items.filter(i => i.state === "rested").length },
-  { label: "plated",    color: "#3498db", filter: (w: World) => w.items.filter(i => i.state === "plated").length },
-  { label: "served",    color: "#9b59b6", filter: (w: World) => w.items.filter(i => i.state === "served").length },
-  { label: "dirty",     color: "#e67e22", filter: (w: World) => w.items.filter(i => i.state === "dirty").length },
-  { label: "clean",     color: "#1abc9c", filter: (w: World) => w.items.filter(i => i.state === "clean").length },
-] as const;
+const CHART_STAGES = ACTIVE_RECIPE.chartStages.map((s) => ({
+  label: s.label,
+  color: s.color,
+  filter: (w: World) => w.items.filter((i) => i.state === s.state).length,
+}));
 
 const SAMPLE_INTERVAL = 20;
 const MAX_SAMPLES = 200;

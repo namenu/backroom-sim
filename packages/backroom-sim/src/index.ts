@@ -12,14 +12,19 @@ export type {
   BackroomLayout,
   SimConfig,
   LogEntry,
+  Recipe,
+  StationMeta,
+  ChartStageDef,
+  RewardMilestone,
 } from "./types";
 
 // Workflow (abstract)
 export { WorkflowGraph } from "./workflow";
 export type { Place, Transition, WorkflowDef, PlaceRole, StorageRoute } from "./workflow";
 
-// Default workflow
+// Default workflow + recipe
 export { DEFAULT_WORKFLOW, DEFAULT_WORKFLOW_DEF } from "./kitchen";
+export { STEAK_RECIPE, STEAK_LAYOUT, STEAK_CONFIG } from "./kitchen";
 
 // Rule engine
 export { DEFAULT_RULES, perceive, evaluate, execute, matchCondition } from "./engine";

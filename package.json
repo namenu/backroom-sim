@@ -8,8 +8,9 @@
     "apps/*"
   ],
   "devDependencies": {
-    "vitest": "^4.0.0",
-    "typescript": "~5.8.0"
+    "canvas": "^3.2.1",
+    "typescript": "~5.8.0",
+    "vitest": "^4.0.0"
   },
   "scripts": {
     "dev": "npm run dev -w backroom-viewer",

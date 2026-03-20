@@ -1,14 +1,15 @@
 import {
   type World,
   type Worker,
-  type ItemType,
   type ItemState,
   type SimConfig,
   type BackroomLayout,
+  type Recipe,
   DEFAULT_CONFIG,
 } from "./types";
 import type { WorkflowGraph } from "./workflow/graph";
 import { DEFAULT_WORKFLOW } from "./kitchen/workflow";
+import { STEAK_RECIPE } from "./kitchen/recipe";
 import { perceive, evaluate, execute, DEFAULT_RULES } from "./engine";
 import { patchAt, CARDINAL_DIRS, bfsDirection, buildBlockedGrid, log, isTileBlocked, MOVE_TICKS } from "./helpers";
 
@@ -16,6 +17,7 @@ export function createWorld(
   config: SimConfig = DEFAULT_CONFIG,
   layout: BackroomLayout,
   workflow: WorkflowGraph = DEFAULT_WORKFLOW,
+  recipe: Recipe = STEAK_RECIPE,
 ): World {
   const stations = layout.stations.map((d) => ({ type: d.type, x: d.x, y: d.y }));
   const stationTileSet = new Set(stations.map((s) => `${s.x},${s.y}`));
@@ -39,9 +41,9 @@ export function createWorld(
     nextWorkerId: config.workerCount,
     config,
     workflow,
+    recipe,
     ordersServed: 0,
   };
-  // Spawn initial batch of orders
   spawnOrders(world);
   return world;
 }
@@ -55,26 +57,22 @@ function createWorker(id: number, gx: number, gy: number): Worker {
 }
 
 /**
- * Spawn a batch of steak orders at the order_window stations.
- * Each order places a raw steak in the fridge (simulating "주문 → 냉장고에서 꺼냄").
- * The order ticket appears at the order_window as "ordered" state,
- * and a corresponding raw meat item is placed in the fridge.
+ * Spawn a batch of orders using the recipe definition.
+ * Items are placed at the recipe's spawnStationType in the initialItemState.
  */
 function spawnOrders(world: World) {
-  const orderWindows = world.stations.filter((s) => s.type === "order_window");
-  const fridges = world.stations.filter((s) => s.type === "fridge");
-  const types: ItemType[] = ["ribeye", "sirloin", "tenderloin", "tbone"];
+  const spawnStations = world.stations.filter((s) => s.type === world.recipe.spawnStationType);
+  const types = world.recipe.itemTypes;
 
-  if (orderWindows.length === 0 || fridges.length === 0) return;
+  if (spawnStations.length === 0 || types.length === 0) return;
 
   for (let i = 0; i < world.config.orderSize; i++) {
-    const fridge = fridges[i % fridges.length];
-    // Place raw meat directly in fridge (ready to be picked up for processing)
+    const station = spawnStations[i % spawnStations.length];
     world.items.push({
       id: world.nextItemId++,
       type: types[i % types.length],
-      state: "raw",
-      x: fridge.x, y: fridge.y,
+      state: world.recipe.initialItemState,
+      x: station.x, y: station.y,
       carriedBy: null,
     });
   }
@@ -140,7 +138,6 @@ function handleDeparting(worker: Worker, world: World) {
     return;
   }
 
-  // Drop carried item
   if (worker.carryingItem !== null) {
     const item = world.items.find((i) => i.id === worker.carryingItem);
     if (item) {
@@ -165,7 +162,6 @@ function handleDeparting(worker: Worker, world: World) {
     return;
   }
 
-  // BFS toward entrance
   const blocked = buildBlockedGrid(world, worker.id);
   const dir = bfsDirection(world.cols, world.rows, blocked, worker.x, worker.y, entrance.x, entrance.y, true);
   if (dir) {
@@ -234,15 +230,13 @@ function work(worker: Worker, world: World) {
         if (!station) continue;
         const transition = world.workflow.findTransition(station.type, item.state);
         if (transition) {
-          const prevState = item.state;
           item.state = transition.toColor as ItemState;
           item.x = station.x;
           item.y = station.y;
           item.carriedBy = null;
           worker.carryingItem = null;
           log(world, worker.id, `done → ${item.type}[${item.state}]`);
-          // Track served orders
-          if (item.state === "served") {
+          if (item.state === world.recipe.servedState) {
             world.ordersServed++;
           }
           break;
@@ -268,7 +262,7 @@ function fireAutoTransitions(world: World) {
   for (const item of world.items) {
     if (item.carriedBy !== null) continue;
     const stationType = patchAt(world, item.x, item.y);
-    if (stationType === "floor") continue;
+    if (stationType === world.recipe.floorType) continue;
 
     for (const t of world.workflow.autoTransitionsAt(stationType)) {
       if (t.fromColor !== item.state) continue;
@@ -295,14 +289,14 @@ function orderStockCap(world: World): number {
 
 function tickOrders(world: World) {
   if (world.tick > 0 && world.tick % world.config.orderInterval === 0) {
-    const rawCount = world.items.filter(i => i.state === "raw" || i.state === "ordered").length;
-    if (rawCount < orderStockCap(world)) {
+    const initialState = world.recipe.initialItemState;
+    const pendingCount = world.items.filter(i => i.state === initialState).length;
+    if (pendingCount < orderStockCap(world)) {
       spawnOrders(world);
     }
   }
 }
 
-/** Shared tick logic: orders, auto transitions, passive worker updates. */
 function tickBase(world: World) {
   world.tick++;
   tickOrders(world);
@@ -317,10 +311,6 @@ export function tickWorld(world: World) {
   }
 }
 
-/**
- * Passive tick — everything EXCEPT agent decisions.
- * Used by environment where actions are provided externally.
- */
 export function tickWorldPassive(world: World) {
   tickBase(world);
   for (const worker of world.workers) {

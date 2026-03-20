@@ -4,11 +4,8 @@ import type { World, Worker, ItemState } from "../types";
  * Per-worker reward state — tracks what changed between ticks.
  */
 export interface RewardState {
-  /** Was the worker carrying an item last tick? */
   wasCarrying: boolean;
-  /** Item states snapshot (id → state) for items this worker touched */
   itemStates: Map<number, ItemState>;
-  /** Was the worker working last tick? */
   wasWorking: boolean;
 }
 
@@ -22,16 +19,13 @@ export function initialRewardState(): RewardState {
 
 // ─── Reward constants ───────────────────────────────────────
 
-const REWARD_TICK = -0.01;           // time pressure
-const REWARD_PICKUP = 0.5;           // picked up an item
-const REWARD_WORK_COMPLETE = 2.0;    // completed a processing step
-const REWARD_SERVE = 5.0;            // steak served (plated → served)
-const REWARD_CLEAN = 1.0;            // dish cleaned (cycle complete)
+const REWARD_TICK = -0.01;
+const REWARD_PICKUP = 0.5;
+const REWARD_WORK_COMPLETE = 2.0;
 
 /**
  * Compute reward for a single worker after one tick.
- *
- * Call AFTER tickWorld but BEFORE updating reward state.
+ * Milestone rewards are read from world.recipe.rewardMilestones.
  */
 export function computeReward(
   world: World,
@@ -43,34 +37,33 @@ export function computeReward(
   const isCarrying = worker.carryingItem !== null;
   const isWorking = worker.state === "working";
 
-  // Pickup reward: wasn't carrying → now carrying
   if (isCarrying && !prev.wasCarrying) {
     reward += REWARD_PICKUP;
   }
 
-  // Work completion: was working → now idle (finished)
   if (prev.wasWorking && !isWorking) {
     reward += REWARD_WORK_COMPLETE;
 
-    // Check if the completed work produced a "served" or "clean" item
+    // Recipe-defined milestone rewards
+    const milestones = world.recipe.rewardMilestones;
     for (const item of world.items) {
       const prevState = prev.itemStates.get(item.id);
       if (prevState === undefined) continue;
       if (prevState !== item.state) {
-        if (item.state === "served") reward += REWARD_SERVE;
-        if (item.state === "clean") reward += REWARD_CLEAN;
+        for (const m of milestones) {
+          if (item.state === m.state) {
+            reward += m.reward;
+          }
+        }
       }
     }
   }
 
-  // Update reward state
   const nextItemStates = new Map<number, ItemState>();
-  // Track items near the worker or being carried
   if (worker.carryingItem !== null) {
     const item = world.items.find((i) => i.id === worker.carryingItem);
     if (item) nextItemStates.set(item.id, item.state);
   }
-  // Track adjacent items
   for (const item of world.items) {
     if (item.carriedBy !== null) continue;
     const dist = Math.abs(item.x - worker.x) + Math.abs(item.y - worker.y);
