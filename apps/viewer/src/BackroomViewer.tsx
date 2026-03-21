@@ -358,6 +358,8 @@ export function BackroomViewer() {
             navigator.clipboard.writeText(JSON.stringify(layout, null, 2)).catch(() => {});
             setShowJson(true);
           }}
+          onSelectLayout={(imported) => setLayout(imported)}
+          onSaveLayout={() => {}}
         />
       </div>
 
@@ -408,6 +410,7 @@ function Sidebar({
   showEditor, onShowEditorChange,
   onSpeedChange, onPausedChange, onReset, onGridSize,
   onToolChange, onWorkerCountChange, onClearLayout, onLoadDefault, onShowJson,
+  onSelectLayout, onSaveLayout,
 }: {
   config: SimConfig;
   speed: number;
@@ -425,7 +428,10 @@ function Sidebar({
   onClearLayout: () => void;
   onLoadDefault: () => void;
   onShowJson: () => void;
+  onSelectLayout: (imported: BackroomLayout) => void;
+  onSaveLayout: (name: string, layout: BackroomLayout) => void;
 }) {
+  const [showGallery, setShowGallery] = useState(false);
   return (
     <>
       <span className="sidebar-section-label">Simulation</span>
@@ -490,6 +496,18 @@ function Sidebar({
           </div>
           <StationSummary layout={layout} />
         </>
+      )}
+
+      <span className="sidebar-section-label" style={{ cursor: "pointer", marginTop: 8 }}
+        onClick={() => setShowGallery(!showGallery)}>
+        {showGallery ? "\u25BC" : "\u25B6"} Layout Gallery
+      </span>
+      {showGallery && (
+        <LayoutGallery
+          currentLayout={layout}
+          onSelect={onSelectLayout}
+          onSave={onSaveLayout}
+        />
       )}
     </>
   );
@@ -1437,6 +1455,236 @@ function StationSummary({ layout }: { layout: BackroomLayout }) {
       <span className="mapeditor-summary-total">
         total: {layout.stations.length}
       </span>
+    </div>
+  );
+}
+
+// ============================================================
+// Layout Gallery — browse & select saved layouts
+// ============================================================
+
+interface SavedLayout {
+  name: string;
+  layout: BackroomLayout;
+  builtin?: boolean;
+}
+
+const LAYOUT_STORAGE_KEY = "backroom-saved-layouts";
+
+const BUILTIN_LAYOUTS: SavedLayout[] = [
+  {
+    name: "Compact Kitchen",
+    builtin: true,
+    layout: {
+      cols: 12, rows: 9,
+      stations: [
+        { type: "receiving", x: 2, y: 0 }, { type: "receiving", x: 3, y: 0 },
+        { type: "receiving", x: 5, y: 0 }, { type: "receiving", x: 6, y: 0 },
+        { type: "shelf", x: 0, y: 2 }, { type: "shelf", x: 0, y: 3 }, { type: "shelf", x: 0, y: 4 },
+        { type: "fridge", x: 11, y: 2 }, { type: "fridge", x: 11, y: 3 },
+        { type: "prep_table", x: 3, y: 3 }, { type: "prep_table", x: 4, y: 3 },
+        { type: "prep_table", x: 6, y: 3 }, { type: "prep_table", x: 7, y: 3 },
+        { type: "stove", x: 8, y: 3 }, { type: "stove", x: 9, y: 3 },
+        { type: "counter", x: 4, y: 6 }, { type: "counter", x: 5, y: 6 },
+        { type: "counter", x: 7, y: 6 }, { type: "counter", x: 8, y: 6 },
+        { type: "returning", x: 9, y: 6 }, { type: "returning", x: 10, y: 6 },
+        { type: "sink", x: 1, y: 8 }, { type: "sink", x: 2, y: 8 },
+        { type: "trash", x: 11, y: 8 }, { type: "entrance", x: 0, y: 0 },
+      ],
+    },
+  },
+  {
+    name: "Linear Flow",
+    builtin: true,
+    layout: {
+      cols: 12, rows: 9,
+      stations: [
+        { type: "entrance", x: 0, y: 0 },
+        { type: "receiving", x: 1, y: 0 }, { type: "receiving", x: 2, y: 0 },
+        { type: "receiving", x: 3, y: 0 }, { type: "receiving", x: 4, y: 0 },
+        { type: "shelf", x: 1, y: 2 }, { type: "shelf", x: 2, y: 2 }, { type: "shelf", x: 3, y: 2 },
+        { type: "fridge", x: 5, y: 2 }, { type: "fridge", x: 6, y: 2 },
+        { type: "prep_table", x: 1, y: 4 }, { type: "prep_table", x: 2, y: 4 },
+        { type: "prep_table", x: 3, y: 4 }, { type: "prep_table", x: 4, y: 4 },
+        { type: "stove", x: 6, y: 4 }, { type: "stove", x: 7, y: 4 },
+        { type: "counter", x: 1, y: 6 }, { type: "counter", x: 2, y: 6 },
+        { type: "counter", x: 3, y: 6 }, { type: "counter", x: 4, y: 6 },
+        { type: "returning", x: 6, y: 6 }, { type: "returning", x: 7, y: 6 },
+        { type: "sink", x: 9, y: 7 }, { type: "sink", x: 10, y: 7 },
+        { type: "trash", x: 11, y: 7 },
+      ],
+    },
+  },
+  {
+    name: "U-Shape",
+    builtin: true,
+    layout: {
+      cols: 12, rows: 9,
+      stations: [
+        { type: "entrance", x: 0, y: 0 },
+        { type: "receiving", x: 3, y: 0 }, { type: "receiving", x: 4, y: 0 },
+        { type: "receiving", x: 7, y: 0 }, { type: "receiving", x: 8, y: 0 },
+        { type: "shelf", x: 0, y: 2 }, { type: "shelf", x: 0, y: 3 }, { type: "shelf", x: 0, y: 4 },
+        { type: "fridge", x: 0, y: 6 }, { type: "fridge", x: 0, y: 7 },
+        { type: "prep_table", x: 3, y: 2 }, { type: "prep_table", x: 4, y: 2 },
+        { type: "prep_table", x: 3, y: 4 }, { type: "prep_table", x: 4, y: 4 },
+        { type: "stove", x: 7, y: 2 }, { type: "stove", x: 7, y: 4 },
+        { type: "counter", x: 11, y: 2 }, { type: "counter", x: 11, y: 3 },
+        { type: "counter", x: 11, y: 4 }, { type: "counter", x: 11, y: 5 },
+        { type: "returning", x: 11, y: 7 }, { type: "returning", x: 11, y: 8 },
+        { type: "sink", x: 5, y: 8 }, { type: "sink", x: 6, y: 8 },
+        { type: "trash", x: 9, y: 8 },
+      ],
+    },
+  },
+  {
+    name: "Center Island",
+    builtin: true,
+    layout: {
+      cols: 12, rows: 9,
+      stations: [
+        { type: "entrance", x: 0, y: 0 },
+        { type: "receiving", x: 2, y: 0 }, { type: "receiving", x: 4, y: 0 },
+        { type: "receiving", x: 6, y: 0 }, { type: "receiving", x: 8, y: 0 },
+        { type: "shelf", x: 1, y: 2 }, { type: "shelf", x: 2, y: 2 }, { type: "shelf", x: 3, y: 2 },
+        { type: "fridge", x: 9, y: 2 }, { type: "fridge", x: 10, y: 2 },
+        { type: "prep_table", x: 5, y: 3 }, { type: "prep_table", x: 6, y: 3 },
+        { type: "prep_table", x: 5, y: 5 }, { type: "prep_table", x: 6, y: 5 },
+        { type: "stove", x: 7, y: 3 }, { type: "stove", x: 7, y: 5 },
+        { type: "counter", x: 3, y: 7 }, { type: "counter", x: 4, y: 7 },
+        { type: "counter", x: 5, y: 7 }, { type: "counter", x: 6, y: 7 },
+        { type: "returning", x: 8, y: 7 }, { type: "returning", x: 9, y: 7 },
+        { type: "sink", x: 0, y: 8 }, { type: "sink", x: 1, y: 8 },
+        { type: "trash", x: 11, y: 8 },
+      ],
+    },
+  },
+];
+
+function loadSavedLayouts(): SavedLayout[] {
+  try {
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function persistSavedLayouts(layouts: SavedLayout[]) {
+  localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layouts));
+}
+
+function MiniGrid({ layout, size = 4 }: { layout: BackroomLayout; size?: number }) {
+  const stationMap = new Map<string, string>();
+  for (const s of layout.stations) stationMap.set(`${s.x},${s.y}`, s.type);
+
+  return (
+    <div
+      className="layout-gallery-mini"
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${layout.cols}, ${size}px)`,
+        gridTemplateRows: `repeat(${layout.rows}, ${size}px)`,
+        gap: 0,
+      }}
+    >
+      {Array.from({ length: layout.rows }, (_, y) =>
+        Array.from({ length: layout.cols }, (_, x) => {
+          const stype = stationMap.get(`${x},${y}`);
+          return (
+            <div
+              key={`${x},${y}`}
+              style={{
+                width: size,
+                height: size,
+                background: stype ? (STATION_COLORS[stype] ?? "#666") : "#1a1c24",
+                borderRadius: stype ? 1 : 0,
+              }}
+            />
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function LayoutGallery({
+  currentLayout,
+  onSelect,
+  onSave,
+}: {
+  currentLayout: BackroomLayout;
+  onSelect: (layout: BackroomLayout) => void;
+  onSave: (name: string, layout: BackroomLayout) => void;
+}) {
+  const [userLayouts, setUserLayouts] = useState<SavedLayout[]>(loadSavedLayouts);
+  const [saveName, setSaveName] = useState("");
+
+  const allLayouts = useMemo(() => [...BUILTIN_LAYOUTS, ...userLayouts], [userLayouts]);
+
+  const handleSave = useCallback(() => {
+    const name = saveName.trim() || `Layout ${userLayouts.length + 1}`;
+    const entry: SavedLayout = { name, layout: structuredClone(currentLayout) };
+    const updated = [...userLayouts, entry];
+    setUserLayouts(updated);
+    persistSavedLayouts(updated);
+    setSaveName("");
+    onSave(name, currentLayout);
+  }, [saveName, currentLayout, userLayouts, onSave]);
+
+  const handleDelete = useCallback((index: number) => {
+    const updated = userLayouts.filter((_, i) => i !== index);
+    setUserLayouts(updated);
+    persistSavedLayouts(updated);
+  }, [userLayouts]);
+
+  return (
+    <div className="layout-gallery">
+      {/* Save current */}
+      <div className="layout-gallery-save">
+        <input
+          type="text"
+          placeholder="Layout name..."
+          value={saveName}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSaveName(e.target.value)}
+          onKeyDown={(e: React.KeyboardEvent) => e.key === "Enter" && handleSave()}
+          className="layout-gallery-input"
+        />
+        <button onClick={handleSave}>Save</button>
+      </div>
+
+      {/* Layout list */}
+      <div className="layout-gallery-list">
+        {allLayouts.map((saved, i) => {
+          const isUser = i >= BUILTIN_LAYOUTS.length;
+          const userIdx = i - BUILTIN_LAYOUTS.length;
+          return (
+            <div
+              key={`${saved.name}-${i}`}
+              className="layout-gallery-item"
+              onClick={() => onSelect(structuredClone(saved.layout))}
+            >
+              <MiniGrid layout={saved.layout} />
+              <div className="layout-gallery-info">
+                <span className="layout-gallery-name">
+                  {saved.name}
+                </span>
+                <span className="layout-gallery-meta">
+                  {saved.layout.cols}x{saved.layout.rows} · {saved.layout.stations.length} stations
+                </span>
+              </div>
+              {isUser && (
+                <button
+                  className="layout-gallery-delete"
+                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleDelete(userIdx); }}
+                  title="Delete"
+                >
+                  {"\u2715"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
