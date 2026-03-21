@@ -401,6 +401,103 @@
   white-space: pre;
 }
 
+/* --- Layout Gallery --- */
+.layout-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout-gallery-save {
+  display: flex;
+  gap: 4px;
+}
+
+.layout-gallery-input {
+  flex: 1;
+  min-width: 0;
+  background: #1a1c24;
+  color: #c8ccd4;
+  border: 1px solid #3a3d48;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.layout-gallery-input::placeholder {
+  color: #555a66;
+}
+
+.layout-gallery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.layout-gallery-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: #1a1c24;
+  border: 1px solid #2a2d38;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.layout-gallery-item:hover {
+  border-color: #e94560;
+  background: #1e1520;
+}
+
+.layout-gallery-mini {
+  flex-shrink: 0;
+  border: 1px solid #2a2d38;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.layout-gallery-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.layout-gallery-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c8ccd4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-gallery-meta {
+  font-size: 9px;
+  color: #555a66;
+}
+
+.layout-gallery-delete {
+  background: none !important;
+  border: none !important;
+  color: #555a66 !important;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px !important;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.layout-gallery-delete:hover {
+  color: #e94560 !important;
+}
+
 /* --- JSON Panel (overlay) --- */
 .mapeditor-json-panel {
   position: fixed;
