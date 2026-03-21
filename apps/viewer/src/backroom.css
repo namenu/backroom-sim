@@ -476,6 +476,29 @@
 }
 
 /* ============================================================
+   Mobile landscape: force landscape orientation
+   ============================================================ */
+
+/* Portrait on mobile → rotate the entire app 90° to simulate landscape */
+@media (max-width: 768px) and (orientation: portrait) {
+  #root {
+    transform: rotate(90deg);
+    transform-origin: top left;
+    position: absolute;
+    top: 0;
+    left: 100vw;
+    width: 100vh;
+    height: 100vw;
+    overflow: auto;
+  }
+
+  html, body {
+    overflow: hidden;
+    /* prevent scroll on the rotated body */
+  }
+}
+
+/* ============================================================
    Mobile responsive
    ============================================================ */
 
