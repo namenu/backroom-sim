@@ -739,6 +739,41 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
             ctx.arc(screenX, screenY - 4, 3, 0, Math.PI * 2);
             ctx.fill();
           }
+
+          // Thought bubble
+          if (worker.thoughtBubble) {
+            const tileFile = STATION_TILE_MAP[worker.thoughtBubble];
+            if (tileFile) {
+              const tileImg = loadImage(TILE_ASSET_BASE + tileFile);
+              const bubbleSize = 20;
+              const iconSize = 14;
+              const bx = screenX - 12;
+              const by = screenY - 44;
+
+              // Bubble background
+              ctx.fillStyle = "rgba(255,255,255,0.9)";
+              ctx.strokeStyle = "rgba(0,0,0,0.3)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(bx, by, bubbleSize / 2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+
+              // Small tail dots
+              ctx.fillStyle = "rgba(255,255,255,0.9)";
+              ctx.beginPath();
+              ctx.arc(bx + 3, by + 12, 2.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(bx + 5, by + 16, 1.5, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Station icon
+              if (tileImg) {
+                ctx.drawImage(tileImg, bx - iconSize / 2, by - iconSize / 2, iconSize, iconSize);
+              }
+            }
+          }
         }});
       }
 
@@ -937,7 +972,7 @@ function EfficiencyChart({ worldRef, statsRef }: {
   const dataRef = useRef<EffChartData>({ ticks: [], throughput: [], utilization: [] });
   const lastSampleTick = useRef(-EFF_SAMPLE_INTERVAL);
   const prevServed = useRef(0);
-  const emaThroughput = useRef(0);
+
 
   useEffect(() => {
     let raf: number;
@@ -956,23 +991,19 @@ function EfficiencyChart({ worldRef, statsRef }: {
         data.ticks = []; data.throughput = []; data.utilization = [];
         lastSampleTick.current = -EFF_SAMPLE_INTERVAL;
         prevServed.current = 0;
-        emaThroughput.current = 0;
+
       }
 
       if (world.tick - lastSampleTick.current >= EFF_SAMPLE_INTERVAL && world.tick > 0) {
         lastSampleTick.current = world.tick;
         data.ticks.push(world.tick);
 
-        // Throughput: EMA of items per 1000 ticks
+        // Throughput: items per 1000 ticks (raw rate, no smoothing)
         let curCompleted = 0;
         for (const i of world.items) if (_visuals.completedSet.has(i.state)) curCompleted++;
         const rawRate = (curCompleted - prevServed.current) * (1000 / EFF_SAMPLE_INTERVAL);
         prevServed.current = curCompleted;
-        const alpha = 0.15; // smoothing factor
-        emaThroughput.current = emaThroughput.current === 0 && rawRate > 0
-          ? rawRate
-          : emaThroughput.current * (1 - alpha) + rawRate * alpha;
-        data.throughput.push(emaThroughput.current);
+        data.throughput.push(rawRate);
 
         // Utilization: avg (working+carrying) / total across all workers
         const stats = statsRef.current;

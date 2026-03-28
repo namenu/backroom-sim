@@ -51,7 +51,7 @@ export function createWorld(
 function createWorker(id: number, gx: number, gy: number): Worker {
   return {
     id, x: gx, y: gy,
-    fatigue: 0, carryingItem: null, state: "idle", departing: false, intent: "",
+    fatigue: 0, carryingItem: null, state: "idle", departing: false, intent: "", thoughtBubble: null,
     moveCooldown: 0, workTimer: 0, workDuration: 0, workTargetX: null, workTargetY: null,
   };
 }
@@ -212,6 +212,15 @@ function decide(worker: Worker, world: World) {
   const action = evaluate(DEFAULT_RULES, perception);
   execute(world, worker, action, perception);
 
+  // Set thought bubble: which station is the worker heading to?
+  if (perception.carriedItem) {
+    worker.thoughtBubble = perception.adjacentTransform?.station.type
+      ?? perception.nextStationForCarried
+      ?? null;
+  } else {
+    worker.thoughtBubble = perception.nearestWork?.stationType ?? null;
+  }
+
   if (action.kind === "wait") {
     worker.intent = perception.nearestWork || perception.carriedItem ? "blocked" : "idle";
   }
@@ -252,6 +261,7 @@ function work(worker: Worker, world: World) {
     }
     worker.state = "idle";
     worker.intent = "";
+    worker.thoughtBubble = null;
     worker.workTargetX = null;
     worker.workTargetY = null;
   }

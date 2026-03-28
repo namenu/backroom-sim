@@ -34,6 +34,8 @@ export interface Worker {
   state: "idle" | "moving" | "working";
   departing: boolean;
   intent: string;
+  /** Station type the worker is heading to / thinking about (for thought bubble) */
+  thoughtBubble: StationType | null;
   moveCooldown: number;
   workTimer: number;
   workDuration: number;
