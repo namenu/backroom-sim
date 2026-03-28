@@ -30,6 +30,9 @@ export { STEAK_RECIPE, STEAK_LAYOUT, STEAK_CONFIG } from "./kitchen";
 export { BACKROOM_WORKFLOW, BACKROOM_WORKFLOW_DEF } from "./backroom";
 export { BACKROOM_RECIPE, BACKROOM_LAYOUT, BACKROOM_CONFIG } from "./backroom";
 
+// Factory recipe
+export * from "./factory";
+
 // Rule engine
 export { DEFAULT_RULES, perceive, evaluate, execute, matchCondition } from "./engine";
 export type { Rule, Condition, Action, Intent, Perception, PipelineSnapshot, StationSummary } from "./engine";
