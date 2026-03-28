@@ -38,3 +38,6 @@ export type { Rule, Condition, Action, Intent, Perception, PipelineSnapshot, Sta
 export { BackroomEnv } from "./env";
 export { AgentAction, ACTION_COUNT, OBS_SIZE } from "./env";
 export type { Observation, StepResult, EnvConfig } from "./env";
+
+// Map generation (WFC)
+export * from "./mapgen/index.js";
