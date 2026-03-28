@@ -1,5 +1,6 @@
 import type { World, Worker, Item, Station, StationType, ItemState } from "../types";
-import { patchAt, CARDINAL_DIRS, bfsDirection, buildBlockedGrid } from "../helpers";
+import { patchAt, buildBlockedGrid, astarDirection } from "../helpers";
+import { isAdjacentToStation } from "../station-utils.js";
 import type {
   Perception,
   ItemView,
@@ -42,11 +43,10 @@ function isItemClaimed(world: World, itemId: number, excludeWorkerId: number): b
 
 function getAdjacentStations(worker: Worker, world: World): Station[] {
   const result: Station[] = [];
-  for (const [dx, dy] of CARDINAL_DIRS) {
-    const s = world.stations.find(
-      (st) => st.x === worker.x + dx && st.y === worker.y + dy,
-    );
-    if (s) result.push(s);
+  for (const s of world.stations) {
+    if (isAdjacentToStation(worker.x, worker.y, s)) {
+      result.push(s);
+    }
   }
   return result;
 }
@@ -100,9 +100,8 @@ function computePipelineSnapshot(world: World): PipelineSnapshot {
   const workersBusy = new Map<string, number>();
   for (const w of world.workers) {
     if (w.state !== "working") continue;
-    for (const [dx, dy] of CARDINAL_DIRS) {
-      const s = world.stations.find(st => st.x === w.x + dx && st.y === w.y + dy);
-      if (s) {
+    for (const s of world.stations) {
+      if (isAdjacentToStation(w.x, w.y, s)) {
         workersBusy.set(s.type, (workersBusy.get(s.type) ?? 0) + 1);
         break;
       }
@@ -229,13 +228,13 @@ export function perceive(world: World, worker: Worker): Perception {
   const blocked = buildBlockedGrid(world, worker.id);
   const { cols, rows } = world;
   const dirToNextStation = nearestNextStation
-    ? bfsDirection(cols, rows, blocked, worker.x, worker.y, nearestNextStation.x, nearestNextStation.y, true)
+    ? astarDirection(cols, rows, blocked, worker.x, worker.y, nearestNextStation.x, nearestNextStation.y, true)
     : null;
   const dirToStorage = nearestStorageForCarried
-    ? bfsDirection(cols, rows, blocked, worker.x, worker.y, nearestStorageForCarried.x, nearestStorageForCarried.y, true)
+    ? astarDirection(cols, rows, blocked, worker.x, worker.y, nearestStorageForCarried.x, nearestStorageForCarried.y, true)
     : null;
   const dirToWork = nearestWork
-    ? bfsDirection(cols, rows, blocked, worker.x, worker.y, nearestWork.x, nearestWork.y, true)
+    ? astarDirection(cols, rows, blocked, worker.x, worker.y, nearestWork.x, nearestWork.y, true)
     : null;
 
   return {

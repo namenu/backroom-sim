@@ -16,6 +16,7 @@ export type {
   StationMeta,
   ChartStageDef,
   RewardMilestone,
+  FloorDecoration,
 } from "./types";
 
 // Workflow (abstract)

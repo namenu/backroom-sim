@@ -1,4 +1,5 @@
 import type { World, StationType } from "./types";
+import { stationAtTile, stationOccupies } from "./station-utils.js";
 
 export const CARDINAL_DIRS = [[0, -1], [0, 1], [-1, 0], [1, 0]] as const;
 
@@ -6,7 +7,7 @@ export const MOVE_TICKS = 10;
 const MAX_LOGS = 80;
 
 export function patchAt(world: World, x: number, y: number): StationType {
-  return world.stations.find((s) => s.x === x && s.y === y)?.type ?? "floor";
+  return stationAtTile(world.stations, x, y)?.type ?? "floor";
 }
 
 export function log(world: World, workerId: number, message: string) {
@@ -33,7 +34,9 @@ export type BlockedGrid = Uint8Array;
 export function buildBlockedGrid(world: World, excludeWorkerId: number): BlockedGrid {
   const grid = new Uint8Array(world.cols * world.rows);
   for (const s of world.stations) {
-    grid[s.y * world.cols + s.x] = 1;
+    for (const t of stationOccupies(s)) {
+      grid[t.y * world.cols + t.x] = 1;
+    }
   }
   for (const w of world.workers) {
     if (w.id !== excludeWorkerId) {
@@ -106,3 +109,5 @@ export function bfsDirection(
 
   return null;
 }
+
+export { astarDirection } from "./pathfinding.js";

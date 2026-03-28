@@ -6,6 +6,15 @@ export interface Station {
   type: StationType;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
+}
+
+/** Visual-only floor decoration (pipes, conveyors, etc.) */
+export interface FloorDecoration {
+  type: string; // "pipe_h", "pipe_v", "conveyor_h", etc.
+  x: number;
+  y: number;
 }
 
 // --- Items ---
@@ -52,7 +61,8 @@ export interface LogEntry {
 export interface BackroomLayout {
   cols: number;
   rows: number;
-  stations: { type: StationType; x: number; y: number }[];
+  stations: { type: StationType; x: number; y: number; width?: number; height?: number }[];
+  decorations?: FloorDecoration[];
 }
 
 // --- Config ---

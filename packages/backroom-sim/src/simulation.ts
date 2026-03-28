@@ -11,7 +11,8 @@ import type { WorkflowGraph } from "./workflow/graph";
 import { DEFAULT_WORKFLOW } from "./kitchen/workflow";
 import { STEAK_RECIPE } from "./kitchen/recipe";
 import { perceive, evaluate, execute, DEFAULT_RULES } from "./engine";
-import { patchAt, CARDINAL_DIRS, bfsDirection, buildBlockedGrid, log, isTileBlocked, MOVE_TICKS } from "./helpers";
+import { patchAt, CARDINAL_DIRS, astarDirection, buildBlockedGrid, log, isTileBlocked, MOVE_TICKS } from "./helpers";
+import { stationTileSetFromStations, isAdjacentToStation } from "./station-utils.js";
 
 export function createWorld(
   config: SimConfig = DEFAULT_CONFIG,
@@ -19,8 +20,8 @@ export function createWorld(
   workflow: WorkflowGraph = DEFAULT_WORKFLOW,
   recipe: Recipe = STEAK_RECIPE,
 ): World {
-  const stations = layout.stations.map((d) => ({ type: d.type, x: d.x, y: d.y }));
-  const stationTileSet = new Set(stations.map((s) => `${s.x},${s.y}`));
+  const stations = layout.stations.map((d) => ({ type: d.type, x: d.x, y: d.y, width: d.width, height: d.height }));
+  const stationTileSet = stationTileSetFromStations(stations);
 
   const workers: Worker[] = [];
   for (let i = 0; i < config.workerCount; i++) {
@@ -77,12 +78,6 @@ function spawnOrders(world: World) {
       processTimer: -1,
     });
   }
-}
-
-// --- Helpers ---
-
-function isAdjacentTo(wx: number, wy: number, tx: number, ty: number): boolean {
-  return Math.abs(wx - tx) + Math.abs(wy - ty) === 1;
 }
 
 // --- Worker spawning / despawning ---
@@ -156,7 +151,7 @@ function handleDeparting(worker: Worker, world: World) {
     return;
   }
 
-  if (isAdjacentTo(worker.x, worker.y, entrance.x, entrance.y)) {
+  if (isAdjacentToStation(worker.x, worker.y, entrance)) {
     log(world, worker.id, "left");
     const idx = world.workers.indexOf(worker);
     if (idx >= 0) world.workers.splice(idx, 1);
@@ -164,7 +159,7 @@ function handleDeparting(worker: Worker, world: World) {
   }
 
   const blocked = buildBlockedGrid(world, worker.id);
-  const dir = bfsDirection(world.cols, world.rows, blocked, worker.x, worker.y, entrance.x, entrance.y, true);
+  const dir = astarDirection(world.cols, world.rows, blocked, worker.x, worker.y, entrance.x, entrance.y, true);
   if (dir) {
     const nx = worker.x + dir[0];
     const ny = worker.y + dir[1];
@@ -224,11 +219,8 @@ function work(worker: Worker, world: World) {
   if (worker.workTimer >= worker.workDuration) {
     const item = world.items.find((i) => i.id === worker.carryingItem);
     if (item) {
-      for (const [dx, dy] of CARDINAL_DIRS) {
-        const station = world.stations.find(
-          (s) => s.x === worker.x + dx && s.y === worker.y + dy,
-        );
-        if (!station) continue;
+      for (const station of world.stations) {
+        if (!isAdjacentToStation(worker.x, worker.y, station)) continue;
         const transition = world.workflow.findTransition(station.type, item.state);
         if (transition) {
           item.state = transition.toColor as ItemState;
