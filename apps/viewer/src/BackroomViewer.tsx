@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { createCamera, centerOnGrid, applyZoom, applyPan, getVisibleTileRange, type Camera } from "./camera";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
   createWorld,
@@ -606,11 +607,89 @@ function EditorGrid({
 // ============================================================
 
 function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loadImage = useImageCache();
   const frameCountRef = useRef(0);
   const fpsRef = useRef({ lastTime: 0, frames: 0, value: 0 });
   const visualsRef = useRef(new Map<number, WorkerVisual>());
+  const cameraRef = useRef<Camera>(createCamera(800, 600));
+  const isPanningRef = useRef(false);
+  const lastPanRef = useRef({ x: 0, y: 0 });
+  const layoutKeyRef = useRef("");
+
+  // Fit camera to grid
+  const fitAll = useCallback(() => {
+    const cam = cameraRef.current;
+    cameraRef.current = centerOnGrid(cam, layout.cols, layout.rows, SCALED_TILE_W, SCALED_TILE_H);
+  }, [layout.cols, layout.rows]);
+
+  // Reset camera when layout changes
+  useEffect(() => {
+    const key = `${layout.cols}x${layout.rows}`;
+    if (layoutKeyRef.current !== key) {
+      layoutKeyRef.current = key;
+      fitAll();
+    }
+  }, [layout.cols, layout.rows, fitAll]);
+
+  // Resize observer to keep viewport dimensions in sync
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          cameraRef.current = { ...cameraRef.current, viewportW: width, viewportH: height };
+        }
+      }
+    });
+    obs.observe(container);
+    // Initialize size
+    const rect = container.getBoundingClientRect();
+    cameraRef.current = { ...cameraRef.current, viewportW: rect.width, viewportH: rect.height };
+    fitAll();
+    return () => obs.disconnect();
+  }, [fitAll]);
+
+  // Wheel handler for zoom
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const factor = e.deltaY > 0 ? 1 / 1.1 : 1.1;
+      cameraRef.current = applyZoom(cameraRef.current, factor, mouseX, mouseY);
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Mouse handlers for panning
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    // Left click or middle click for pan
+    if (e.button === 0 || e.button === 1) {
+      isPanningRef.current = true;
+      lastPanRef.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+    }
+  }, []);
+
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanningRef.current) return;
+    const dx = e.clientX - lastPanRef.current.x;
+    const dy = e.clientY - lastPanRef.current.y;
+    lastPanRef.current = { x: e.clientX, y: e.clientY };
+    cameraRef.current = applyPan(cameraRef.current, dx, dy);
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    isPanningRef.current = false;
+  }, []);
 
   useEffect(() => {
     let raf: number;
@@ -629,25 +708,31 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
       if (!canvas) { raf = requestAnimationFrame(render); return; }
       const ctx = canvas.getContext("2d")!;
 
-      const TOP_PAD = SCALED_TILE_H * 2;
-      const totalW = (layout.cols + layout.rows) * (SCALED_TILE_W / 2) + SCALED_TILE_W;
-      const totalH = (layout.cols + layout.rows) * (SCALED_TILE_H / 2) + TOP_PAD + SCALED_TILE_H;
+      const camera = cameraRef.current;
+      const viewW = camera.viewportW;
+      const viewH = camera.viewportH;
 
       const dpr = window.devicePixelRatio || 1;
-      const targetW = Math.round(totalW * dpr);
-      const targetH = Math.round(totalH * dpr);
+      const targetW = Math.round(viewW * dpr);
+      const targetH = Math.round(viewH * dpr);
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
-        canvas.style.width = `${totalW}px`;
-        canvas.style.height = `${totalH}px`;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        canvas.style.width = `${viewW}px`;
+        canvas.style.height = `${viewH}px`;
       }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      ctx.clearRect(0, 0, totalW, totalH);
+      const TOP_PAD = SCALED_TILE_H * 2;
+      ctx.clearRect(0, 0, viewW, viewH);
 
       const originX = layout.rows * (SCALED_TILE_W / 2);
       const originY = TOP_PAD;
+
+      // Apply camera transform
+      ctx.save();
+      ctx.translate(camera.panX, camera.panY);
+      ctx.scale(camera.zoom, camera.zoom);
 
       // Update worker visuals
       const visuals = visualsRef.current;
@@ -675,10 +760,13 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
         v.visualY = v.segStartY + (v.gridY - v.segStartY) * progress;
       }
 
-      // Pass 1: Floor tiles
+      // Viewport culling range
+      const visible = getVisibleTileRange(camera, layout.cols, layout.rows, originX, originY, SCALED_TILE_W, SCALED_TILE_H);
+
+      // Pass 1: Floor tiles (culled)
       const floorImg = loadImage(TILE_ASSET_BASE + "floor.png");
-      for (let gy = 0; gy < layout.rows; gy++) {
-        for (let gx = 0; gx < layout.cols; gx++) {
+      for (let gy = visible.minGY; gy <= visible.maxGY; gy++) {
+        for (let gx = visible.minGX; gx <= visible.maxGX; gx++) {
           const [sx, sy] = gridToIsoScaled(gx, gy);
           const screenX = originX + sx;
           const screenY = originY + sy;
@@ -695,6 +783,7 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
       const drawables: Drawable[] = [];
 
       for (const s of world.stations) {
+        if (s.x < visible.minGX || s.x > visible.maxGX || s.y < visible.minGY || s.y > visible.maxGY) continue;
         const depth = s.x + s.y;
         const [sx, sy] = gridToIsoScaled(s.x, s.y);
         const screenX = originX + sx;
@@ -714,6 +803,8 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
 
       for (const worker of world.workers) {
         const v = visuals.get(worker.id)!;
+        if (v.visualX < visible.minGX - 1 || v.visualX > visible.maxGX + 1 ||
+            v.visualY < visible.minGY - 1 || v.visualY > visible.maxGY + 1) continue;
         const depth = v.visualX + v.visualY + 0.5;
         const [sx, sy] = gridToIsoScaled(v.visualX, v.visualY);
         const screenX = originX + sx;
@@ -745,13 +836,50 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
       drawables.sort((a, b) => a.depth - b.depth);
       for (const d of drawables) d.draw();
 
-      // FPS counter
+      ctx.restore();
+
+      // FPS counter (drawn in screen space, outside camera transform)
       ctx.fillStyle = "rgba(0,0,0,0.5)";
       ctx.fillRect(2, 2, 48, 16);
       ctx.fillStyle = "#0f0";
       ctx.font = "11px monospace";
       ctx.textAlign = "left";
       ctx.fillText(`${fpsRef.current.value} fps`, 6, 14);
+
+      // Minimap (bottom-right corner)
+      const mmW = 120, mmH = 80;
+      const mmX = viewW - mmW - 8, mmY = viewH - mmH - 8;
+      const gridW = (layout.cols + layout.rows) * (SCALED_TILE_W / 2) + SCALED_TILE_W;
+      const gridH = (layout.cols + layout.rows) * (SCALED_TILE_H / 2) + SCALED_TILE_H * 2 + SCALED_TILE_H;
+      const mmScale = Math.min(mmW / gridW, mmH / gridH);
+
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(mmX, mmY, mmW, mmH);
+      ctx.strokeStyle = "#555";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(mmX, mmY, mmW, mmH);
+
+      ctx.fillStyle = "#888";
+      for (const s of world.stations) {
+        const [sx, sy] = gridToIsoScaled(s.x, s.y);
+        const px = mmX + (originX + sx) * mmScale;
+        const py = mmY + (originY + sy) * mmScale;
+        ctx.fillRect(px - 1, py - 1, 2, 2);
+      }
+
+      // Viewport rectangle on minimap
+      const vpLeft = -camera.panX / camera.zoom;
+      const vpTop = -camera.panY / camera.zoom;
+      const vpRight = (viewW - camera.panX) / camera.zoom;
+      const vpBottom = (viewH - camera.panY) / camera.zoom;
+      ctx.strokeStyle = "#0f0";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
+        mmX + vpLeft * mmScale,
+        mmY + vpTop * mmScale,
+        (vpRight - vpLeft) * mmScale,
+        (vpBottom - vpTop) * mmScale,
+      );
 
       raf = requestAnimationFrame(render);
     };
@@ -761,10 +889,40 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
   }, [world, layout, loadImage]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="backroom-iso-canvas"
-    />
+    <div style={{ position: "relative" }}>
+      <div
+        ref={containerRef}
+        style={{ width: "100%", height: 600, overflow: "hidden" }}
+      >
+        <canvas
+          ref={canvasRef}
+          className="backroom-iso-canvas"
+          style={{ cursor: isPanningRef.current ? "grabbing" : "grab", display: "block" }}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+          onContextMenu={(e) => e.preventDefault()}
+        />
+      </div>
+      <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 4 }}>
+        <button
+          onClick={() => { cameraRef.current = applyZoom(cameraRef.current, 1.3, cameraRef.current.viewportW / 2, cameraRef.current.viewportH / 2); }}
+          style={{ width: 28, height: 28, fontSize: 16, cursor: "pointer", background: "#333", color: "#fff", border: "1px solid #555", borderRadius: 4 }}
+          title="Zoom in"
+        >+</button>
+        <button
+          onClick={() => { cameraRef.current = applyZoom(cameraRef.current, 1 / 1.3, cameraRef.current.viewportW / 2, cameraRef.current.viewportH / 2); }}
+          style={{ width: 28, height: 28, fontSize: 16, cursor: "pointer", background: "#333", color: "#fff", border: "1px solid #555", borderRadius: 4 }}
+          title="Zoom out"
+        >-</button>
+        <button
+          onClick={fitAll}
+          style={{ height: 28, fontSize: 11, cursor: "pointer", background: "#333", color: "#fff", border: "1px solid #555", borderRadius: 4, padding: "0 6px" }}
+          title="Fit all"
+        >Fit</button>
+      </div>
+    </div>
   );
 }
 
