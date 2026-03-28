@@ -26,6 +26,7 @@ import {
   type WorkflowDef,
   type Transition,
 } from "backroom-sim";
+import { getStationAnimState, getStationFrame, getStationAssetName } from "./station-animations";
 
 // ============================================================
 // Recipe registry — add new concepts here to make them selectable
@@ -509,6 +510,25 @@ function Sidebar({
           onSave={onSaveLayout}
         />
       )}
+
+      <span className="sidebar-section-label" style={{ marginTop: 8 }}>Map Generation</span>
+      <div className="sidebar-buttons">
+        <button onClick={async () => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mod = await import("backroom-sim") as any;
+            if (typeof mod.generateFactoryLayout !== "function") throw new Error("not available");
+            const newLayout = mod.generateFactoryLayout({
+              width: 30,
+              height: 20,
+              seed: Math.random() * 10000 | 0,
+            });
+            onSelectLayout(newLayout);
+          } catch {
+            alert("Map generation module not available yet. Coming soon!");
+          }
+        }}>Generate Map</button>
+      </div>
     </>
   );
 }
@@ -694,6 +714,22 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
       type Drawable = { depth: number; draw: () => void };
       const drawables: Drawable[] = [];
 
+      // Floor decorations pass (between floor and stations)
+      const decorations = (layout as BackroomLayout & { decorations?: { type: string; x: number; y: number }[] }).decorations;
+      if (decorations) {
+        for (const dec of decorations) {
+          const [sx, sy] = gridToIsoScaled(dec.x, dec.y);
+          const screenX = originX + sx;
+          const screenY = originY + sy;
+          const decImg = loadImage(TILE_ASSET_BASE + dec.type + ".png");
+          if (decImg) {
+            const dw = decImg.width * RENDER_SCALE;
+            const dh = decImg.height * RENDER_SCALE;
+            ctx.drawImage(decImg, screenX - dw / 2, screenY - dh + SCALED_TILE_H / 2, dw, dh);
+          }
+        }
+      }
+
       for (const s of world.stations) {
         const depth = s.x + s.y;
         const [sx, sy] = gridToIsoScaled(s.x, s.y);
@@ -702,7 +738,15 @@ function IsometricGrid({ world, layout }: { world: World; layout: BackroomLayout
         drawables.push({ depth, draw: () => {
           const tileFile = STATION_TILE_MAP[s.type];
           if (tileFile) {
-            const img = loadImage(TILE_ASSET_BASE + tileFile);
+            // Determine animation state and frame
+            const animState = getStationAnimState(world, s);
+            const frame = getStationFrame(animState, frameCountRef.current);
+            const baseAsset = tileFile.replace(/\.png$/, "");
+            const animAssetName = getStationAssetName(baseAsset, animState, frame);
+
+            // Try animated frame first, fall back to base tile
+            const animImg = loadImage(TILE_ASSET_BASE + animAssetName + ".png");
+            const img = animImg || loadImage(TILE_ASSET_BASE + tileFile);
             if (img) {
               const dw = img.width * RENDER_SCALE;
               const dh = img.height * RENDER_SCALE;
