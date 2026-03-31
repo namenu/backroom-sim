@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateLayout } from "../optimizer/validate";
 import { evaluateLayout, DEFAULT_EVAL_CONFIG } from "../optimizer/evaluate";
-import { BACKROOM_LAYOUT, BACKROOM_CONFIG } from "../backroom/recipe";
+import { BACKROOM_LAYOUT, BACKROOM_CONFIG, BACKROOM_STATION_COUNTS } from "../backroom/recipe";
 import { BACKROOM_WORKFLOW } from "../backroom/workflow";
 import type { BackroomLayout } from "../types";
 
@@ -10,6 +10,28 @@ describe("validateLayout", () => {
     const result = validateLayout(BACKROOM_LAYOUT, BACKROOM_WORKFLOW);
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
+  });
+
+  it("accepts the default backroom layout with station counts", () => {
+    const result = validateLayout(BACKROOM_LAYOUT, BACKROOM_WORKFLOW, BACKROOM_STATION_COUNTS);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("rejects layout with missing station type", () => {
+    const stations = BACKROOM_LAYOUT.stations.filter((s) => s.type !== "trash");
+    const layout: BackroomLayout = { ...BACKROOM_LAYOUT, stations };
+    const result = validateLayout(layout, BACKROOM_WORKFLOW, BACKROOM_STATION_COUNTS);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("trash") && e.includes("count mismatch"))).toBe(true);
+  });
+
+  it("rejects layout with extra station", () => {
+    const stations = [...BACKROOM_LAYOUT.stations, { type: "sink", x: 5, y: 5 }];
+    const layout: BackroomLayout = { ...BACKROOM_LAYOUT, stations };
+    const result = validateLayout(layout, BACKROOM_WORKFLOW, BACKROOM_STATION_COUNTS);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("sink") && e.includes("count mismatch"))).toBe(true);
   });
 
   it("rejects layout with entrance not at (0,0)", () => {

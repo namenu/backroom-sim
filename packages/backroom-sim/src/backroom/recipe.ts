@@ -93,6 +93,20 @@ export const BACKROOM_LAYOUT: BackroomLayout = {
   ],
 };
 
+/** Required station counts for the backroom optimization problem. */
+export const BACKROOM_STATION_COUNTS: Readonly<Record<string, number>> = {
+  entrance: 1,
+  receiving: 4,
+  shelf: 3,
+  fridge: 2,
+  prep_table: 4,
+  stove: 2,
+  counter: 4,
+  returning: 2,
+  sink: 2,
+  trash: 1,
+};
+
 /** Default config for the backroom recipe. */
 export const BACKROOM_CONFIG: SimConfig = {
   workerCount: 3,

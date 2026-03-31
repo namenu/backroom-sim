@@ -130,11 +130,17 @@ Before running full optimization, verify the agent has minimum competence by pas
 
 **Task**: Produce a `BackroomLayout` JSON (12×9 grid, all 25 stations) that passes `validateLayout()` with zero errors.
 
-**Tests**: Entrance at (0,0), receiving at y=0, no overlap, full connectivity.
+**Tests**:
+1. **Station inventory** — exact per-type counts must match (see Fixed Parameters table above):
+   `entrance×1, receiving×4, shelf×3, fridge×2, prep_table×4, stove×2, counter×4, returning×2, sink×2, trash×1`
+2. Entrance at (0,0)
+3. Receiving at y=0
+4. No overlap
+5. Full connectivity (BFS reachable)
 
-**Pass criteria**: `{"valid": true}` from the evaluator.
+**Pass criteria**: `{"valid": true}` from the evaluator. The evaluator enforces station inventory — missing or extra stations will fail.
 
-**Why**: If the agent can't satisfy the constraints, it doesn't understand the problem structure.
+**Why**: If the agent can't satisfy the constraints (including the exact station inventory), it doesn't understand the problem structure.
 
 ### G1 — Identify the Bottleneck
 

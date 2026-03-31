@@ -13,21 +13,41 @@ export interface ValidationResult {
  * Validate a candidate layout against all placement constraints.
  *
  * Constraints:
- *  1. Entrance must be at (0, 0).
- *  2. Receiving (intake) stations must be on the top edge (y = 0).
- *  3. No two stations may occupy the same tile.
- *  4. All stations must be within grid bounds.
- *  5. All non-station tiles must form a connected walkable region
+ *  1. Station inventory must match expected counts (if provided).
+ *  2. Entrance must be at (0, 0).
+ *  3. Receiving (intake) stations must be on the top edge (y = 0).
+ *  4. No two stations may occupy the same tile.
+ *  5. All stations must be within grid bounds.
+ *  6. All non-station tiles must form a connected walkable region
  *     (every station is reachable from the entrance).
  */
 export function validateLayout(
   layout: BackroomLayout,
   workflow: WorkflowGraph,
+  expectedCounts?: Readonly<Record<string, number>>,
 ): ValidationResult {
   const errors: string[] = [];
   const { cols, rows, stations } = layout;
 
-  // 1. Entrance pinned at (0, 0)
+  // 1. Station inventory check (if expected counts provided)
+  if (expectedCounts) {
+    const actual: Record<string, number> = {};
+    for (const s of stations) {
+      actual[s.type] = (actual[s.type] ?? 0) + 1;
+    }
+    const allTypes = new Set([...Object.keys(expectedCounts), ...Object.keys(actual)]);
+    for (const type of allTypes) {
+      const expected = expectedCounts[type] ?? 0;
+      const got = actual[type] ?? 0;
+      if (got !== expected) {
+        errors.push(
+          `Station "${type}" count mismatch: expected ${expected}, got ${got}`,
+        );
+      }
+    }
+  }
+
+  // 2. Entrance pinned at (0, 0)
   const entrances = stations.filter(
     (s) => workflow.placeRole(s.type) === "entrance",
   );

@@ -28,7 +28,7 @@ export { STEAK_RECIPE, STEAK_LAYOUT, STEAK_CONFIG } from "./kitchen";
 
 // Backroom (original) recipe
 export { BACKROOM_WORKFLOW, BACKROOM_WORKFLOW_DEF } from "./backroom";
-export { BACKROOM_RECIPE, BACKROOM_LAYOUT, BACKROOM_CONFIG } from "./backroom";
+export { BACKROOM_RECIPE, BACKROOM_LAYOUT, BACKROOM_CONFIG, BACKROOM_STATION_COUNTS } from "./backroom";
 
 // Rule engine
 export { DEFAULT_RULES, perceive, evaluate, execute, matchCondition } from "./engine";

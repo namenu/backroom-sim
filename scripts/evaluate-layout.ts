@@ -19,6 +19,7 @@ import {
   BACKROOM_RECIPE,
   BACKROOM_LAYOUT,
   BACKROOM_CONFIG,
+  BACKROOM_STATION_COUNTS,
   BACKROOM_WORKFLOW,
   STEAK_RECIPE,
   STEAK_LAYOUT,
@@ -32,10 +33,10 @@ import { evaluateLayout, DEFAULT_EVAL_CONFIG } from "../packages/backroom-sim/sr
 function getRecipeConfig(recipeName: string) {
   switch (recipeName) {
     case "steak":
-      return { recipe: STEAK_RECIPE, config: STEAK_CONFIG, workflow: DEFAULT_WORKFLOW, defaultLayout: STEAK_LAYOUT };
+      return { recipe: STEAK_RECIPE, config: STEAK_CONFIG, workflow: DEFAULT_WORKFLOW, defaultLayout: STEAK_LAYOUT, stationCounts: undefined };
     case "backroom":
     default:
-      return { recipe: BACKROOM_RECIPE, config: BACKROOM_CONFIG, workflow: BACKROOM_WORKFLOW, defaultLayout: BACKROOM_LAYOUT };
+      return { recipe: BACKROOM_RECIPE, config: BACKROOM_CONFIG, workflow: BACKROOM_WORKFLOW, defaultLayout: BACKROOM_LAYOUT, stationCounts: BACKROOM_STATION_COUNTS };
   }
 }
 
@@ -57,8 +58,8 @@ interface BatchRequest {
 }
 
 function evaluateSingle(layout: BackroomLayout, recipeName: string, ticks: number) {
-  const { recipe, config, workflow } = getRecipeConfig(recipeName);
-  const validation = validateLayout(layout, workflow);
+  const { recipe, config, workflow, stationCounts } = getRecipeConfig(recipeName);
+  const validation = validateLayout(layout, workflow, stationCounts);
 
   if (!validation.valid) {
     return { valid: false, errors: validation.errors };
