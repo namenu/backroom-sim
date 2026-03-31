@@ -122,6 +122,56 @@ Per-station utilization (baseline):
 | Good | ≥ 15% improvement over baseline |
 | Excellent | ≥ 30% improvement over baseline |
 
+## Agent Qualification Gates
+
+Before running full optimization, verify the agent has minimum competence by passing these gates in order. An agent that fails G0–G2 will not produce meaningful optimization results.
+
+### G0 — Generate a Valid Layout
+
+**Task**: Produce a `BackroomLayout` JSON (12×9 grid, all 25 stations) that passes `validateLayout()` with zero errors.
+
+**Tests**: Entrance at (0,0), receiving at y=0, no overlap, full connectivity.
+
+**Pass criteria**: `{"valid": true}` from the evaluator.
+
+**Why**: If the agent can't satisfy the constraints, it doesn't understand the problem structure.
+
+### G1 — Identify the Bottleneck
+
+**Task**: Given the following deliberately bad layout (workflow-consecutive stations placed at maximum distance), explain why it performs poorly.
+
+```json
+{"cols":12,"rows":9,"stations":[
+  {"type":"entrance","x":0,"y":0},
+  {"type":"receiving","x":3,"y":0},{"type":"receiving","x":5,"y":0},
+  {"type":"receiving","x":7,"y":0},{"type":"receiving","x":9,"y":0},
+  {"type":"prep_table","x":10,"y":8},{"type":"prep_table","x":8,"y":8},
+  {"type":"prep_table","x":6,"y":8},{"type":"prep_table","x":4,"y":8},
+  {"type":"stove","x":0,"y":4},{"type":"stove","x":0,"y":6},
+  {"type":"counter","x":11,"y":2},{"type":"counter","x":11,"y":4},
+  {"type":"counter","x":11,"y":6},{"type":"counter","x":11,"y":8},
+  {"type":"returning","x":0,"y":2},{"type":"returning","x":0,"y":8},
+  {"type":"sink","x":5,"y":4},{"type":"sink","x":7,"y":4},
+  {"type":"shelf","x":2,"y":8},{"type":"shelf","x":2,"y":4},{"type":"shelf","x":2,"y":6},
+  {"type":"fridge","x":9,"y":4},{"type":"fridge","x":9,"y":6},
+  {"type":"trash","x":6,"y":6}
+]}
+```
+
+This layout scores **fitness = 2.494** (12 served) — 13% worse than baseline.
+
+**Pass criteria**: The agent identifies that receiving→prep_table and prep_table→stove travel distances are excessive, wasting worker time on movement instead of processing. Bonus: notes that stove (300t, the longest processing step) being far from both its predecessor (prep_table) and successor (counter) creates the worst bottleneck.
+
+**Why**: If the agent can't reason about spatial-temporal relationships, it's doing blind search.
+
+### G2 — Beat the Baseline
+
+**Task**: Starting from the bad layout above, modify station positions to achieve fitness > 2.872 (the hand-crafted baseline).
+
+**Pass criteria**: Evaluator returns fitness > 2.872.
+
+**Why**: This is the minimum bar for useful optimization. The agent must demonstrate it can translate spatial reasoning into concrete improvements.
+
 ## How to Run
 
 ### Evaluate a single layout
